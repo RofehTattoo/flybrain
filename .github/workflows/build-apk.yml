@@ -1,0 +1,44 @@
+name: Build FlyBrain APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "principal" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar proyecto
+        uses: actions/checkout@v4
+
+      - name: Preparar Android
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar SDK Android
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Instalar Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Descomprimir proyecto
+        run: |
+          mkdir proyecto
+          unzip -q FlyBrainV01_GitHub_Actions.zip -d proyecto
+
+      - name: Compilar APK
+        working-directory: proyecto
+        run: gradle :app:assembleDebug
+
+      - name: Guardar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlyBrain-V0.1-APK
+          path: proyecto/app/build/outputs/apk/debug/app-debug.apk
