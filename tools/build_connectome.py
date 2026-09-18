@@ -765,8 +765,12 @@ def main(root: Path) -> None:
     desc = superclass_range("descending_neuron")
     asc = superclass_range("ascending_neuron")
     vmotor = superclass_range("vnc_motor")
-    other_idx = np.where(selected["block"].to_numpy() == 7)[0]
-    other = (int(other_idx.min()), int(other_idx.max()+1)) if len(other_idx) else (0,0)
+    # OTHER is the runtime sensory/central remainder block. It must use the
+    # same contiguous node range as channel_ranges["other"], not the source
+    # selection's historical block-7 positions. Using block-7 here produced
+    # the V1.04 validator failure: OTHER_START=0 while channel_ranges["other"]
+    # correctly started at 1457.
+    other = (int(ranges["other"][0]), int(ranges["other"][1]))
 
     meta = root / "app" / "src" / "main" / "java" / "com" / "example" / "flybrain" / "GeneratedConnectomeMeta.kt"
     motor_role_counts = {int(k): int(v) for k,v in selected.groupby("motor_role").size().to_dict().items()}
