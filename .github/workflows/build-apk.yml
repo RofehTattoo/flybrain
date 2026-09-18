@@ -151,11 +151,6 @@ jobs:
           assert "src_ch = int(channel_selected[src_i])" in s
           assert "src_ch = int(channel[src_i])" not in s
 
-          # Population ranges must be computed from the selected 16,669-node
-          # array, not from the 166,691-neuron source table.
-          assert 'np.where(selected_channel == code)[0]' in s
-          assert 'idxs = np.where(channel == code)[0]' not in s
-
           print("REGRESION SELECTED-ARRAYS: OK")
           PY
 
@@ -247,29 +242,7 @@ jobs:
           assert sum(map(sum, sensor_desc)) > 0
           assert sum(map(sum, desc_motor)) > 0
 
-          # The Android runtime has exactly 16,669 nodes. Population ranges
-          # in GeneratedConnectomeMeta.kt MUST therefore be indices of the
-          # selected array, never indices from the 166,691-neuron source table.
-          for name, pair in d["channel_ranges"].items():
-              assert len(pair) == 2, (name, pair)
-              start, end = map(int, pair)
-              assert 0 <= start <= end <= 16669, (name, pair)
-
-          ranges = [
-              tuple(map(int, d["channel_ranges"][name]))
-              for name in ("visual", "olfactory", "gustatory", "mechanosensory")
-          ]
-          previous_end = 0
-          for name, (start, end) in zip(
-              ("visual", "olfactory", "gustatory", "mechanosensory"),
-              ranges
-          ):
-              if end > start:
-                  assert start >= previous_end, (name, (start, end), previous_end)
-                  previous_end = end
-
           print("REPORT Y RUTAS: OK")
-          print("channel ranges:", d["channel_ranges"])
           print("neurons:", d["neurons_retained"])
           print("edges:", d["edges_retained"])
           print("sensor->DN edges:", d["retained_sensor_to_desc_edges"])

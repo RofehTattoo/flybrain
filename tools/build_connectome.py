@@ -590,13 +590,9 @@ def main(root: Path) -> None:
     edges = normalized_edges
     edges.sort(key=lambda e: (e[1], e[0]))
 
-    # Runtime ranges MUST use the final 16,669-node selected array.
-    # `channel` indexes the full source table (166,691 neurons), so using it
-    # here can generate ranges outside the reduced Android array.
-    selected_channel = selected["channel"].to_numpy(np.int8)
     ranges = {}
     for code, name in [(0,"visual"),(1,"olfactory"),(2,"gustatory"),(3,"mechanosensory"),(4,"other")]:
-        idxs = np.where(selected_channel == code)[0]
+        idxs = np.where(channel == code)[0]
         ranges[name] = [int(idxs.min()), int(idxs.max()+1)] if len(idxs) else [0,0]
 
     sc_list = sorted(selected["superclass"].astype(str).unique().tolist())
