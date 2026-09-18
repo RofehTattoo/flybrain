@@ -1,4 +1,4 @@
-name: Build FlyBrain APK FIXED
+name: Build FlyBrain APK V0.93
 
 on:
   workflow_dispatch:
@@ -34,14 +34,14 @@ jobs:
           gradle-version: '8.9'
 
 
-      - name: Descomprimir proyecto FIXED
+      - name: Descomprimir proyecto V0.93
         run: |
           set -e
 
           rm -rf proyecto
           mkdir -p proyecto
 
-          unzip -q FlyBrainV092_FIXED_GitHub_Actions.zip -d proyecto
+          unzip -q FlyBrainV093_GitHub_Actions.zip -d proyecto
 
           echo "========================================"
           echo "Contenido del proyecto:"
@@ -49,23 +49,25 @@ jobs:
           echo "========================================"
 
 
-      - name: Verificar proyecto V0.92 FIXED
+      - name: Verificar proyecto V0.93
         run: |
           set -e
 
           test -f proyecto/app/build.gradle.kts
           test -f proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
 
-          grep -q 'versionCode = 92' proyecto/app/build.gradle.kts
-          grep -q 'versionName = "0.92"' proyecto/app/build.gradle.kts
-          grep -q 'FLYBRAIN V0.92' proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -q 'N=16669' proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -q 'versionCode = 93' proyecto/app/build.gradle.kts
+          grep -q 'versionName = "0.93"' proyecto/app/build.gradle.kts
+          grep -q 'FLYBRAIN V0.93' proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -q 'N = 16669' proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
 
           echo "========================================"
-          echo "PROYECTO V0.92 FIXED CORRECTO"
+          echo "PROYECTO V0.93 CORRECTO"
           echo "16.669 neuronas"
-          echo "MaleCNS reducido al 10%"
-          echo "Error de sintaxis corregido"
+          echo "Arquitectura neuronal V0.93"
+          echo "LIF adaptativo + plasticidad"
+          echo "Navegación y estados premotores"
+          echo "Respuesta a comida, luz y peligro"
           echo "========================================"
 
 
@@ -82,7 +84,7 @@ jobs:
           test -f proyecto/app/build/outputs/apk/debug/app-debug.apk
 
           echo "========================================"
-          echo "APK V0.92 FIXED GENERADO CORRECTAMENTE"
+          echo "APK V0.93 GENERADO CORRECTAMENTE"
           echo "========================================"
 
           ls -lh proyecto/app/build/outputs/apk/debug/app-debug.apk
@@ -91,6 +93,6 @@ jobs:
       - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V0.92-FIXED-APK
+          name: FlyBrain-V0.93-APK
           path: proyecto/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
