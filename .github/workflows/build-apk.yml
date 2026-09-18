@@ -22,7 +22,7 @@ jobs:
       # ============================================================
 
       - name: Descargar proyecto
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
 
       # ============================================================
@@ -30,7 +30,7 @@ jobs:
       # ============================================================
 
       - name: Preparar Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
@@ -41,7 +41,7 @@ jobs:
       # ============================================================
 
       - name: Preparar Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -61,7 +61,7 @@ jobs:
       # ============================================================
 
       - name: Instalar Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
@@ -78,11 +78,11 @@ jobs:
           echo "COMPROBANDO ZIP FLYBRAIN V0.96"
           echo "========================================"
 
-          test -f 'FlyBrainV096_GitHub_Actions.zip'
+          test -f "FlyBrainV096_GitHub_Actions.zip"
 
-          unzip -t 'FlyBrainV096_GitHub_Actions.zip' >/dev/null
+          unzip -t "FlyBrainV096_GitHub_Actions.zip" >/dev/null
 
-          ls -lh 'FlyBrainV096_GitHub_Actions.zip'
+          ls -lh "FlyBrainV096_GitHub_Actions.zip"
 
           echo "ZIP V0.96 CORRECTO"
 
@@ -102,25 +102,25 @@ jobs:
           rm -rf proyecto
           mkdir -p proyecto
 
-          unzip -q 'FlyBrainV096_GitHub_Actions.zip' -d proyecto
+          unzip -q "FlyBrainV096_GitHub_Actions.zip" -d proyecto
 
           echo "Comprobando estructura..."
 
-          test -f 'proyecto/settings.gradle.kts'
-          test -f 'proyecto/build.gradle.kts'
-          test -f 'proyecto/gradle.properties'
+          test -f "proyecto/settings.gradle.kts"
+          test -f "proyecto/build.gradle.kts"
+          test -f "proyecto/gradle.properties"
 
-          test -f 'proyecto/tools/build_connectome.py'
+          test -f "proyecto/tools/build_connectome.py"
 
-          test -f 'proyecto/app/build.gradle.kts'
+          test -f "proyecto/app/build.gradle.kts"
 
-          test -f 'proyecto/app/src/main/AndroidManifest.xml'
-
-          test -f \
-            'proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt'
+          test -f "proyecto/app/src/main/AndroidManifest.xml"
 
           test -f \
-            'proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt'
+            "proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
+
+          test -f \
+            "proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
           echo "ESTRUCTURA V0.96 CORRECTA"
 
@@ -148,7 +148,7 @@ jobs:
 
 
       # ============================================================
-      # 9. VALIDAR SCRIPT DEL CONNECTOME
+      # 9. VALIDAR SCRIPT MALECNS
       # ============================================================
 
       - name: Validar extractor MaleCNS
@@ -187,19 +187,19 @@ jobs:
           echo "========================================"
 
           test -f \
-            'app/src/main/res/raw/malecns_reduced.bin'
+            "app/src/main/res/raw/malecns_reduced.bin"
 
           test -f \
-            'app/src/main/res/raw/malecns_reduced_report.json'
+            "app/src/main/res/raw/malecns_reduced_report.json"
 
           test -f \
-            'app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt'
+            "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
-          echo "Archivos generados correctamente."
+          echo "ARCHIVOS GENERADOS CORRECTAMENTE"
 
 
       # ============================================================
-      # 11. VERIFICAR 16.669 NEURONAS Y ROLES MOTORES
+      # 11. VERIFICAR REDUCCIÓN
       # ============================================================
 
       - name: Verificar reducción MaleCNS V0.96
@@ -213,39 +213,39 @@ jobs:
 
           grep -Fq \
             '"neurons_retained": 16669' \
-            'app/src/main/res/raw/malecns_reduced_report.json'
+            "app/src/main/res/raw/malecns_reduced_report.json"
 
           grep -Fq \
             'NEURONS = 16669' \
-            'app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt'
+            "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
           grep -Fq \
             'MOTOR_LEG = 1' \
-            'app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt'
+            "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
           grep -Fq \
             'MOTOR_WING = 2' \
-            'app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt'
+            "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
           grep -Fq \
             'MOTOR_HALTERE = 3' \
-            'app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt'
+            "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
           grep -Fq \
             'MOTOR_NECK = 4' \
-            'app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt'
+            "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
           grep -Fq \
             'MOTOR_ABDOMEN = 5' \
-            'app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt'
+            "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
           grep -Fq \
             'MOTOR_JUMP = 6' \
-            'app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt'
+            "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
           grep -Fq \
             'MOTOR_OTHER = 7' \
-            'app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt'
+            "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
           echo "========================================"
           echo "MALECNS V0.96 VALIDADO"
@@ -260,8 +260,10 @@ jobs:
           echo "Motor JUMP: OK"
           echo "Motor OTHER: OK"
 
+          echo "========================================"
+
           ls -lh \
-            'app/src/main/res/raw/malecns_reduced.bin'
+            "app/src/main/res/raw/malecns_reduced.bin"
 
 
       # ============================================================
@@ -277,36 +279,36 @@ jobs:
           echo "========================================"
 
           test -f \
-            'proyecto/app/build.gradle.kts'
+            "proyecto/app/build.gradle.kts"
 
           test -f \
-            'proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt'
+            "proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
 
           test -f \
-            'proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt'
+            "proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
           test -f \
-            'proyecto/app/src/main/res/raw/malecns_reduced.bin'
+            "proyecto/app/src/main/res/raw/malecns_reduced.bin"
 
           grep -Fq \
             'versionCode = 96' \
-            'proyecto/app/build.gradle.kts'
+            "proyecto/app/build.gradle.kts"
 
           grep -Fq \
             'versionName = "0.96"' \
-            'proyecto/app/build.gradle.kts'
+            "proyecto/app/build.gradle.kts"
 
           grep -Fq \
             'FLYBRAIN V0.96' \
-            'proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt'
+            "proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
 
           grep -Fq \
             'NEURONS = 16669' \
-            'proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt'
+            "proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
           grep -Fq \
             'FBC96' \
-            'proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt'
+            "proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
 
           echo "========================================"
           echo "PROYECTO V0.96 VALIDADO"
@@ -342,4 +344,41 @@ jobs:
 
           echo "========================================"
           echo "COMPILACION FINALIZADA"
-          echo "========================================
+          echo "========================================"
+
+
+      # ============================================================
+      # 14. VERIFICAR APK
+      # ============================================================
+
+      - name: Verificar APK V0.96
+        run: |
+          set -euo pipefail
+
+          echo "========================================"
+          echo "VERIFICANDO APK V0.96"
+          echo "========================================"
+
+          APK="proyecto/app/build/outputs/apk/debug/app-debug.apk"
+
+          test -f "$APK"
+          test -s "$APK"
+
+          echo "APK ENCONTRADO:"
+          ls -lh "$APK"
+
+          echo "========================================"
+          echo "APK V0.96 VERIFICADO CORRECTAMENTE"
+          echo "========================================"
+
+
+      # ============================================================
+      # 15. SUBIR APK
+      # ============================================================
+
+      - name: Subir APK V0.96
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlyBrain-V0.96-APK
+          path: proyecto/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
