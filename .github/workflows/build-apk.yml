@@ -34,6 +34,11 @@ jobs:
           mkdir proyecto
           unzip -q FlyBrainV01_GitHub_Actions.zip -d proyecto
 
+      - name: Corregir versión Java
+        run: |
+          sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' proyecto/app/build.gradle.kts
+          sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' proyecto/app/build.gradle.kts
+
       - name: Compilar APK
         working-directory: proyecto
         run: gradle :app:assembleDebug
