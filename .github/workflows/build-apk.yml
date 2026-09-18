@@ -86,6 +86,7 @@ jobs:
           MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
           META="app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
           BUILDER="tools/build_connectome.py"
+          WORKFLOW=".github/workflows/build-apk.yml"
 
           grep -Fq 'versionCode = 102' "$APP"
           grep -Fq 'versionName = "1.02"' "$APP"
@@ -102,18 +103,18 @@ jobs:
           LEGACY_ZIP="FlyBrainV$(printf '101')_GitHub_Actions.zip"
           LEGACY_MAGIC="FBC$(printf '101')"
 
-          if grep -Fq "$LEGACY_ZIP" .github/workflows/build-apk.yml; then
+          if grep -Fq "$LEGACY_ZIP" "$WORKFLOW"; then
             echo "ERROR: referencia de archivo V1.01 detectada en el workflow"
             exit 1
           fi
 
-          if grep -Fq "$LEGACY_MAGIC" .github/workflows/build-apk.yml; then
+          if grep -Fq "$LEGACY_MAGIC" "$WORKFLOW"; then
             echo "ERROR: formato binario legacy detectado en el workflow"
             exit 1
           fi
 
-          grep -Fq 'FBC102' .github/workflows/build-apk.yml
-          grep -Fq 'FlyBrain-V1.02-APK' .github/workflows/build-apk.yml
+          grep -Fq 'FBC102' "$WORKFLOW"
+          grep -Fq 'FlyBrain-V1.02-APK' "$WORKFLOW"
 
           echo "IDENTIDAD V1.02: OK"
 
@@ -143,7 +144,9 @@ jobs:
           ]
 
           for name in required:
-              assert re.search(rf"\\b{name}\\s*=", s), f"missing assignment: {name}"
+              assert re.search(rf"\b{name}\s*=", s), (
+                  f"missing assignment: {name}"
+              )
 
           assert "src_ch = int(channel_selected[src_i])" in s
           assert "src_ch = int(channel[src_i])" not in s
@@ -157,6 +160,7 @@ jobs:
       - name: Instalar dependencias Python
         run: |
           set -euo pipefail
+
           python -m pip install --upgrade pip
           python -m pip install numpy pandas pyarrow
 
@@ -185,6 +189,7 @@ jobs:
       - name: Validar connectome FBC102 independientemente
         run: |
           set -euo pipefail
+
           python tools/validate_generated_connectome.py
 
       # ============================================================
@@ -215,16 +220,25 @@ jobs:
           assert d["retained_desc_to_motor_contacts"] > 0
 
           rs = d["route_score_selected_counts"]
+
           assert rs["forward_nonzero"] > 0
           assert rs["turn_nonzero"] > 0
           assert rs["escape_nonzero"] > 0
 
-          sensor_desc = d["retained_sensor_to_desc_by_channel_role_contacts"]
-          desc_motor = d["retained_desc_to_motor_by_role_contacts"]
+          sensor_desc = d[
+              "retained_sensor_to_desc_by_channel_role_contacts"
+          ]
+
+          desc_motor = d[
+              "retained_desc_to_motor_by_role_contacts"
+          ]
+
           assert len(sensor_desc) == 4
           assert all(len(r) == 5 for r in sensor_desc)
+
           assert len(desc_motor) == 5
           assert all(len(r) == 8 for r in desc_motor)
+
           assert sum(map(sum, sensor_desc)) > 0
           assert sum(map(sum, desc_motor)) > 0
 
@@ -245,10 +259,14 @@ jobs:
 
           python - <<'PY'
           from pathlib import Path
-          import struct, json, math
+          import struct
+          import json
+          import math
 
           BIN = Path("app/src/main/res/raw/malecns_reduced.bin")
-          REPORT = Path("app/src/main/res/raw/malecns_reduced_report.json")
+          REPORT = Path(
+              "app/src/main/res/raw/malecns_reduced_report.json"
+          )
 
           data = BIN.read_bytes()
           report = json.loads(REPORT.read_text())
@@ -260,11 +278,15 @@ jobs:
           TARGET = 16669
 
           assert data[:8] == MAGIC
+
           n, e = struct.unpack_from("<II", data, 8)
+
           assert n == TARGET
-          assert e == report["edges_retained"] > 0
+          assert e == report["edges_retained"]
+          assert e > 0
 
           expected = HEADER_SIZE + n * NODE_SIZE + e * EDGE_SIZE
+
           assert len(data) == expected
 
           node_start = HEADER_SIZE
@@ -276,18 +298,39 @@ jobs:
 
           for i in range(n):
               off = node_start + i * NODE_SIZE
-              rec = struct.unpack_from("<qbbbbbfff", data, off)
-              body_id, superclass, side, channel, motor_role, descending_role, rf, rt, re = rec
+
+              rec = struct.unpack_from(
+                  "<qbbbbbfff",
+                  data,
+                  off
+              )
+
+              (
+                  body_id,
+                  superclass,
+                  side,
+                  channel,
+                  motor_role,
+                  descending_role,
+                  rf,
+                  rt,
+                  re,
+              ) = rec
+
               assert body_id > 0
               assert side in (-1, 0, 1)
               assert 0 <= channel <= 4
               assert 0 <= motor_role <= 7
               assert 0 <= descending_role <= 4
-              for v in (rf, rt, re):
-                  assert math.isfinite(v) and 0.0 <= v <= 1.0
+
+              for value in (rf, rt, re):
+                  assert math.isfinite(value)
+                  assert 0.0 <= value <= 1.0
+
               route_counts[0] += rf > 0
               route_counts[1] += rt > 0
               route_counts[2] += re > 0
+
               motor_nodes += motor_role > 0
               descending_nodes += descending_role > 0
 
@@ -297,7 +340,13 @@ jobs:
 
           for i in range(e):
               off = edge_start + i * EDGE_SIZE
-              src, dst, weight = struct.unpack_from("<iif", data, off)
+
+              src, dst, weight = struct.unpack_from(
+                  "<iif",
+                  data,
+                  off
+              )
+
               assert 0 <= src < n
               assert 0 <= dst < n
               assert math.isfinite(weight)
@@ -329,8 +378,11 @@ jobs:
           grep -Fq 'MOTOR_ABDOMEN = 5' "$META"
           grep -Fq 'MOTOR_JUMP = 6' "$META"
           grep -Fq 'MOTOR_OTHER = 7' "$META"
+
           grep -Fq 'descending_role_counts' "$REPORT"
           grep -Fq 'descending_role_definition' "$REPORT"
+
+          echo "ROLES MOTOR + DESCENDENTES: OK"
 
       # ============================================================
       # 15. DINAMICA + DIAGNOSTICOS + ACCIONES
@@ -338,15 +390,35 @@ jobs:
       - name: Validar dinámica, diagnóstico y acciones
         run: |
           set -euo pipefail
+
           MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
 
-          for x in synTrace synDecay locomotorDrive locomotorPhase motorActivityMemory \
-                   visualRateDisplay olfactoryRateDisplay gustatoryRateDisplay \
-                   mechanosensoryRateDisplay centralRateDisplay descendingRateDisplay \
-                   ascendingRateDisplay motorRateDisplay forwardRouteActivityDisplay \
-                   turnRouteActivityDisplay escapeRouteActivityDisplay \
-                   approachAction escapeAction orientAction exploreAction brakeAction \
-                   turnLeftAction turnRightAction updateActionSelection; do
+          for x in \
+            synTrace \
+            synDecay \
+            locomotorDrive \
+            locomotorPhase \
+            motorActivityMemory \
+            visualRateDisplay \
+            olfactoryRateDisplay \
+            gustatoryRateDisplay \
+            mechanosensoryRateDisplay \
+            centralRateDisplay \
+            descendingRateDisplay \
+            ascendingRateDisplay \
+            motorRateDisplay \
+            forwardRouteActivityDisplay \
+            turnRouteActivityDisplay \
+            escapeRouteActivityDisplay \
+            approachAction \
+            escapeAction \
+            orientAction \
+            exploreAction \
+            brakeAction \
+            turnLeftAction \
+            turnRightAction \
+            updateActionSelection
+          do
             grep -Fq "$x" "$MAIN"
           done
 
@@ -358,6 +430,7 @@ jobs:
       - name: Verificar integridad causal
         run: |
           set -euo pipefail
+
           MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
 
           grep -Fq 'connectomeLoaded' "$MAIN"
@@ -374,12 +447,18 @@ jobs:
             exit 1
           fi
 
-          if grep -Eq 'foodOn.*(approachAction|approachMotor)|food.*=.*approachAction' "$MAIN"; then
+          if grep -Eq \
+            'foodOn.*(approachAction|approachMotor)|food.*=.*approachAction' \
+            "$MAIN"
+          then
             echo "ERROR: posible atajo comida -> aproximación"
             exit 1
           fi
 
-          if grep -Eq 'dangerOn.*(escapeAction|escapeMotor)|danger.*=.*escapeAction' "$MAIN"; then
+          if grep -Eq \
+            'dangerOn.*(escapeAction|escapeMotor)|danger.*=.*escapeAction' \
+            "$MAIN"
+          then
             echo "ERROR: posible atajo peligro -> escape"
             exit 1
           fi
@@ -392,20 +471,28 @@ jobs:
       - name: Validar estructura Kotlin V1.02
         run: |
           set -euo pipefail
+
           python - <<'PY'
           from pathlib import Path
-          s = Path("app/src/main/java/com/example/flybrain/MainActivity.kt").read_text()
+
+          s = Path(
+              "app/src/main/java/com/example/flybrain/MainActivity.kt"
+          ).read_text()
 
           assert s.count("{") == s.count("}")
           assert s.count("(") == s.count(")")
           assert s.count("[") == s.count("]")
+
           assert "FBC102" not in s
           assert "GeneratedConnectomeMeta.FORMAT_MAGIC" in s
+
           assert "val nodeBytes = n.toLong() * 25L" in s
           assert "val edgeBytes = e.toLong() * 12L" in s
+
           assert "routeForward[it] = b.float" in s
           assert "routeTurn[it] = b.float" in s
           assert "routeEscape[it] = b.float" in s
+
           print("KOTLIN ESTRUCTURAL: OK")
           PY
 
@@ -418,12 +505,24 @@ jobs:
 
           test -s app/src/main/res/raw/malecns_reduced.bin
           test -s app/src/main/res/raw/malecns_reduced_report.json
-          grep -Fq 'versionCode = 102' app/build.gradle.kts
-          grep -Fq 'versionName = "1.02"' app/build.gradle.kts
-          grep -Fq 'FORMAT_VERSION = 102' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'NEURONS = 16669' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq '"flybrain_version": "1.02"' app/src/main/res/raw/malecns_reduced_report.json
-          grep -Fq '"binary_format": "FBC102"' app/src/main/res/raw/malecns_reduced_report.json
+
+          grep -Fq 'versionCode = 102' \
+            app/build.gradle.kts
+
+          grep -Fq 'versionName = "1.02"' \
+            app/build.gradle.kts
+
+          grep -Fq 'FORMAT_VERSION = 102' \
+            app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+
+          grep -Fq 'NEURONS = 16669' \
+            app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+
+          grep -Fq '"flybrain_version": "1.02"' \
+            app/src/main/res/raw/malecns_reduced_report.json
+
+          grep -Fq '"binary_format": "FBC102"' \
+            app/src/main/res/raw/malecns_reduced_report.json
 
           echo "VALIDACION PRE-GRADLE: OK"
 
@@ -433,6 +532,7 @@ jobs:
       - name: Compilar APK V1.02
         run: |
           set -euo pipefail
+
           gradle --version
           gradle :app:assembleDebug --stacktrace --no-daemon
 
@@ -444,20 +544,38 @@ jobs:
           set -euo pipefail
 
           APK="app/build/outputs/apk/debug/app-debug.apk"
+
           test -s "$APK"
 
-          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" \
+            -c -v 4 \
+            "$APK"
 
-          BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK")"
-          echo "$BADGING" | grep -Fq "package: name='com.example.flybrain'"
-          echo "$BADGING" | grep -Fq "versionCode='102'"
-          echo "$BADGING" | grep -Fq "versionName='1.02'"
+          BADGING="$(
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" \
+              dump badging \
+              "$APK"
+          )"
 
-          unzip -l "$APK" | grep -Fq 'malecns_reduced.bin'
-          unzip -l "$APK" | grep -Fq 'malecns_reduced_report.json'
+          echo "$BADGING" | \
+            grep -Fq "package: name='com.example.flybrain'"
+
+          echo "$BADGING" | \
+            grep -Fq "versionCode='102'"
+
+          echo "$BADGING" | \
+            grep -Fq "versionName='1.02'"
+
+          unzip -l "$APK" | \
+            grep -Fq 'malecns_reduced.bin'
+
+          unzip -l "$APK" | \
+            grep -Fq 'malecns_reduced_report.json'
 
           echo "APK V1.02 VALIDADO"
+
           ls -lh "$APK"
+
           sha256sum "$APK"
 
       # ============================================================
