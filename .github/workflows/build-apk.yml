@@ -1,4 +1,4 @@
-name: Build FlyBrain APK
+name: Build FlyBrain APK FIXED
 
 on:
   workflow_dispatch:
@@ -34,20 +34,22 @@ jobs:
           gradle-version: '8.9'
 
 
-      - name: Descomprimir proyecto
+      - name: Descomprimir proyecto FIXED
         run: |
           set -e
 
           rm -rf proyecto
           mkdir -p proyecto
 
-          unzip -q FlyBrainV092_GitHub_Actions.zip -d proyecto
+          unzip -q FlyBrainV092_FIXED_GitHub_Actions.zip -d proyecto
 
+          echo "========================================"
           echo "Contenido del proyecto:"
           find proyecto -maxdepth 4 -type f | sort
+          echo "========================================"
 
 
-      - name: Verificar proyecto V0.92
+      - name: Verificar proyecto V0.92 FIXED
         run: |
           set -e
 
@@ -60,9 +62,10 @@ jobs:
           grep -q 'N=16669' proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
 
           echo "========================================"
-          echo "Proyecto V0.92 encontrado correctamente"
+          echo "PROYECTO V0.92 FIXED CORRECTO"
           echo "16.669 neuronas"
           echo "MaleCNS reducido al 10%"
+          echo "Error de sintaxis corregido"
           echo "========================================"
 
 
@@ -79,15 +82,4 @@ jobs:
           test -f proyecto/app/build/outputs/apk/debug/app-debug.apk
 
           echo "========================================"
-          echo "APK generado correctamente"
-          echo "========================================"
-
-          ls -lh proyecto/app/build/outputs/apk/debug/app-debug.apk
-
-
-      - name: Guardar APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: FlyBrain-V0.92-APK
-          path: proyecto/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          echo "APK V0.92 FIXED GENERADO CORRECTAMENTE"
