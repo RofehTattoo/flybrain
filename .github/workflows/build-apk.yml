@@ -10,6 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
 
@@ -22,6 +23,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
 
 
       - name: Preparar Android SDK
@@ -38,38 +46,85 @@ jobs:
 
       - name: Comprobar ZIP V0.95
         run: |
-          set -e
+          set -euo pipefail
 
-          echo "Buscando proyecto V0.95..."
+          echo "========================================"
+          echo "BUSCANDO ZIP V0.95"
+          echo "========================================"
 
           test -f "FlyBrainV095_GitHub_Actions.zip"
 
-          echo "ZIP encontrado correctamente:"
+          unzip -t "FlyBrainV095_GitHub_Actions.zip" >/dev/null
+
           ls -lh "FlyBrainV095_GitHub_Actions.zip"
+
+          echo "ZIP V0.95 CORRECTO"
 
 
       - name: Descomprimir proyecto V0.95
         run: |
-          set -e
+          set -euo pipefail
 
           rm -rf proyecto
           mkdir -p proyecto
 
           unzip -q "FlyBrainV095_GitHub_Actions.zip" -d proyecto
 
+          test -f "proyecto/tools/build_connectome.py"
+          test -f "proyecto/app/build.gradle.kts"
+          test -f "proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
+          test -f "proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
+
           echo "========================================"
           echo "PROYECTO V0.95 DESCOMPRIMIDO"
           echo "========================================"
 
-          find proyecto -maxdepth 4 -type f | sort
+
+      - name: Instalar dependencias del extractor MaleCNS
+        run: |
+          set -euo pipefail
+
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas pyarrow
+
+
+      - name: Generar reducción MaleCNS V0.95
+        working-directory: proyecto
+        run: |
+          set -euo pipefail
+
+          echo "========================================"
+          echo "GENERANDO REDUCCION MALECNS"
+          echo "16.669 NEURONAS"
+          echo "========================================"
+
+          python tools/build_connectome.py
+
+          test -f "app/src/main/res/raw/malecns_reduced.bin"
+          test -f "app/src/main/res/raw/malecns_reduced_report.json"
+          test -f "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
+
+          grep -Fq '"neurons_retained": 16669' \
+            "app/src/main/res/raw/malecns_reduced_report.json"
+
+          grep -Fq 'NEURONS = 16669' \
+            "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
+
+          echo "========================================"
+          echo "REDUCCION MALECNS GENERADA"
+          echo "========================================"
+
+          ls -lh "app/src/main/res/raw/malecns_reduced.bin"
 
 
       - name: Verificar proyecto V0.95
         run: |
-          set -e
+          set -euo pipefail
 
           test -f "proyecto/app/build.gradle.kts"
           test -f "proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
+          test -f "proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
+          test -f "proyecto/app/src/main/res/raw/malecns_reduced.bin"
 
           grep -Fq 'versionCode = 95' \
             "proyecto/app/build.gradle.kts"
@@ -80,8 +135,8 @@ jobs:
           grep -Fq 'FLYBRAIN V0.95' \
             "proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
 
-          grep -Fq 'N = 16669' \
-            "proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
+          grep -Fq 'NEURONS = 16669' \
+            "proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
           echo "========================================"
           echo "PROYECTO V0.95 CORRECTO"
@@ -89,25 +144,26 @@ jobs:
           echo "Version: 0.95"
           echo "VersionCode: 95"
           echo "Neuronas: 16.669"
-          echo "Arquitectura basada en MaleCNS"
-          echo "Connectome-driven"
-          echo "LIF"
-          echo "VNC"
-          echo "Feedback sensorimotor"
+          echo "MaleCNS v1.0"
+          echo "Connectome reducido"
           echo "========================================"
 
 
       - name: Compilar APK
         working-directory: proyecto
         run: |
-          set -e
+          set -euo pipefail
+
+          echo "========================================"
+          echo "COMPILANDO APK V0.95"
+          echo "========================================"
 
           gradle :app:assembleDebug --stacktrace
 
 
       - name: Verificar APK
         run: |
-          set -e
+          set -euo pipefail
 
           test -f "proyecto/app/build/outputs/apk/debug/app-debug.apk"
 
