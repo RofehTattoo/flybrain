@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.02.
+"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.03.
 
 The reduction is derived from the published MaleCNS v1.0 annotation and weighted
 connectivity tables. It keeps exactly 10% of the 166,691-neuron census by
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import struct
 import urllib.request
 from pathlib import Path
@@ -67,7 +68,9 @@ def classify_channel(row) -> int:
     cl = clean(row.get("class", "")).lower()
     sub = clean(row.get("subclass", "")).lower()
     typ = clean(row.get("type", "")).lower()
-    text = " ".join((cl, sub, typ))
+    inst = clean(row.get("instance", "")).lower()
+    name = clean(row.get("name", "")).lower()
+    text = " ".join((cl, sub, typ, inst, name))
     if sc in {"visual_projection", "visual_centrifugal"} or "visual" in text or "optic lobe" in text:
         return 0
     if sc == "ol_sensory" or "olf" in text or "antennal lobe" in text:
@@ -77,6 +80,11 @@ def classify_channel(row) -> int:
     if sc in {"vnc_sensory", "sensory_ascending", "sensory_descending"}:
         return 3
     if sc.startswith("cb_sensory"):
+        return 3
+    if any(k in text for k in (
+        "mechanosensory", "proprio", "bristle", "hair plate",
+        "campaniform", "chordotonal", "johnston",
+    )):
         return 3
     return 4
 
@@ -90,7 +98,7 @@ def classify_motor_role(row) -> int:
     if sc != "vnc_motor":
         return 0
     fields = []
-    for c in ("type", "class", "subclass", "primary_neuropil", "nerve", "target", "muscle", "annotation"):
+    for c in ("type", "instance", "name", "class", "subclass", "primary_neuropil", "nerve", "target", "muscle", "annotation", "group"):
         if c in row.index:
             fields.append(clean(row.get(c, "")))
     text = " ".join(fields).lower()
@@ -110,29 +118,60 @@ def classify_motor_role(row) -> int:
 
 
 def classify_descending_role(row) -> int:
-    """Classify curated descending neurons by published annotation text.
+    """Assign a descriptive motor-family label to a descending neuron.
+
+    The label is metadata only: it never creates, removes, or rewrites an edge.
+    V1.03 uses explicit published cell-type names for the few descending
+    populations whose behavioural role is established, and only then falls
+    back to annotation keywords. This avoids the previous-version failure mode where
+    almost all 1,314 DNs were left as role 0 simply because the annotation
+    did not literally contain words such as "walk" or "escape".
+
     0=generic/unknown, 1=forward/walking, 2=turn/steering,
-    3=backward, 4=escape. This is descriptive metadata only; it does not
-    create or alter connectome edges.
+    3=backward/halting, 4=fast escape.
     """
     sc = clean(row.get("superclass", ""))
     if sc != "descending_neuron":
         return 0
+
     fields = []
-    for c in ("type", "class", "subclass", "primary_neuropil", "target", "annotation"):
+    for c in ("type", "instance", "name", "class", "subclass", "primary_neuropil", "target", "annotation", "group"):
         if c in row.index:
             fields.append(clean(row.get(c, "")))
     text = " ".join(fields).lower()
-    if any(k in text for k in ("mdn", "moonwalker", "backward")):
-        return 3
-    if any(k in text for k in ("escape", "giant fiber", "giant-fiber")):
-        return 4
-    if any(k in text for k in ("dnap02", "dnap03")):
-        return 2
-    if any(k in text for k in ("dna02", "dna03", "dna04", "dnb01", "turn", "steer", "turning", "pfl3")):
-        return 2
-    if any(k in text for k in ("walk", "forward", "pfl2")):
+    compact = re.sub(r"[^a-z0-9]+", "", text)
+
+    # Established walking/forward DNs.
+    if any(k in compact for k in ("dng100", "dng97", "dnb08")) or any(
+        k in text for k in ("forward walking", "walking command")
+    ):
         return 1
+
+    # Established steering/turning DNs and major central-complex descending
+    # targets described for goal-directed steering.
+    if any(k in compact for k in (
+        "dna01", "dna02", "dna03", "dna04", "dna11",
+        "dnb01", "dng13", "dng13a",
+    )) or any(k in text for k in (
+        "turn", "steer", "turning", "steering", "pfl3",
+    )):
+        return 2
+
+    # Moonwalker/backward and halting/landing pathways.
+    if any(k in compact for k in (
+        "dnp50", "mdn", "moonwalker", "dnp07", "dnp09",
+    )) or any(k in text for k in (
+        "backward walking", "backward locomotion", "halting",
+    )):
+        return 3
+
+    # DNp01 is the Giant Fiber descending neuron and drives the fast escape
+    # pathway downstream of optic-lobe looming detectors.
+    if "dnp01" in compact or any(k in text for k in (
+        "giant fiber", "giant-fiber", "giant fibre", "giant-fibre",
+    )):
+        return 4
+
     return 0
 
 def main(root: Path) -> None:
@@ -176,7 +215,7 @@ def main(root: Path) -> None:
     counts = traced.groupby("superclass", sort=True).size().to_dict()
     total = len(traced)
 
-    # V1.02 functional-route analysis. The reduction now preferentially preserves
+    # V1.03 functional-route analysis. The reduction now preferentially preserves
     # measured two-hop pathways in the published graph instead of using a single
     # aggregate bridge score. For each candidate neuron we estimate whether the
     # full connectome contains paths of the form sensor -> candidate -> DN and
@@ -192,6 +231,17 @@ def main(root: Path) -> None:
     channel = traced["channel"].to_numpy(np.int8)
     desc_role = traced["descending_role"].to_numpy(np.int8)
     motor_role = traced["motor_role"].to_numpy(np.int8)
+
+    role_counts_source = np.bincount(desc_role[is_desc], minlength=5)
+    missing_roles = [
+        name for name, role in (("forward", 1), ("turn", 2), ("escape", 4))
+        if int(role_counts_source[role]) == 0
+    ]
+    if missing_roles:
+        raise RuntimeError(
+            "Published MaleCNS annotations did not expose required DN role(s): "
+            + ", ".join(missing_roles)
+        )
 
     # Incoming sensory weight per candidate, separated by modality.
     sensor_in = np.zeros((4, len(ids)), dtype=np.float64)
@@ -275,13 +325,23 @@ def main(root: Path) -> None:
     # Two-hop route scores. Geometric means prevent a cell with only one strong
     # side of a route from dominating. The scores are used for neuron selection
     # and are also embedded as descriptive runtime metadata; they never alter an edge.
-    olf_forward = np.sqrt(np.maximum(0.0, sensor_in[1] * cell_to_desc[1]))
+    # Route-family scores preserve both sides of the circuit:
+    #   sensor -> DN   and   DN -> premotor -> motor.
+    # A candidate does not need to be the same cell on both sides. This is
+    # important for real layered circuits such as LC4/LPLC2 -> DNp01 -> VNC.
+    # The scores are still purely descriptive and never create an edge.
+    sensory_forward = np.sqrt(
+        np.maximum(0.0, sensor_in.sum(axis=0) * cell_to_desc[1])
+    )
     visual_turn = np.sqrt(np.maximum(0.0, sensor_in[0] * cell_to_desc[2]))
-    threat_escape = np.sqrt(np.maximum(0.0, (sensor_in[0] + sensor_in[3]) * cell_to_desc[4]))
+    threat_escape = np.sqrt(
+        np.maximum(0.0, (sensor_in[0] + sensor_in[3]) * cell_to_desc[4])
+    )
 
-    forward_motor_path = np.sqrt(np.maximum(0.0, desc_to_cell[1] * cell_to_motor[1]))
-    # Turning/steering can recruit coordinated motor outputs. The route score
-    # therefore considers every curated motor-role channel rather than only legs.
+    forward_motor_path = np.sqrt(
+        np.maximum(0.0, desc_to_cell[1] * cell_to_motor[1])
+    )
+    # Turning/steering can recruit coordinated motor outputs.
     turn_motor_outputs = cell_to_motor[1:].sum(axis=0)
     turn_motor_path = np.sqrt(
         np.maximum(0.0, desc_to_cell[2] * turn_motor_outputs)
@@ -291,7 +351,7 @@ def main(root: Path) -> None:
         desc_to_cell[4] * (cell_to_motor[1] + cell_to_motor[2] + cell_to_motor[6])
     ))
 
-    route_forward = olf_forward + forward_motor_path
+    route_forward = sensory_forward + forward_motor_path
     route_turn = visual_turn + turn_motor_path
     route_escape = threat_escape + escape_motor_path
     route_sensorimotor = np.sqrt(np.maximum(
@@ -299,12 +359,23 @@ def main(root: Path) -> None:
         sensor_in.sum(axis=0) * cell_to_motor[1:].sum(axis=0)
     ))
 
-    # If the published graph has no turn-route candidate at all, fail here with
-    # a diagnostic instead of producing a misleading zero route in the report.
-    if not np.any(route_turn > 0):
+    # V1.03 is fail-closed at the source-analysis level. A build is not allowed
+    # to publish a reduced graph whose three intended behavioural route families
+    # are silently absent. These are measured topology scores, not synthetic
+    # currents or generated edges.
+    missing_routes = [
+        name for name, score in (
+            ("forward", route_forward),
+            ("turn", route_turn),
+            ("escape", route_escape),
+        )
+        if not np.any(score > 0)
+    ]
+    if missing_routes:
         raise RuntimeError(
-            "MaleCNS v1.0 contains no positive two-hop turn-route candidate "
-            "under the current published-role annotations"
+            "MaleCNS v1.0 route analysis produced no positive measured "
+            + ", ".join(missing_routes)
+            + " route candidate(s); refusing to publish V1.03."
         )
 
     def normalize_score(x):
@@ -328,7 +399,7 @@ def main(root: Path) -> None:
         + 0.18 * route_sensorimotor_n
     )
 
-    # Selection strategy for V1.02:
+    # Selection strategy for V1.03:
     # 1) retain every curated descending neuron and every curated VNC motor neuron;
     # 2) retain at least one representative per published neuron type;
     # 3) reserve a substantial quota for measured two-hop functional routes;
@@ -371,6 +442,10 @@ def main(root: Path) -> None:
     # not to spend the route quota on sensory/DN/MN populations already handled
     # by the forced/type-diversity stages. Ascending neurons remain eligible as
     # measured intermediate/feedback cells.
+    # Route-preservation pool includes sensory bridge cells as well as central
+    # intermediates. This is important for canonical pathways such as
+    # visual/looming -> LC4/LPLC2 -> DNp01 -> VNC. The motor-path validator
+    # below still requires its two-hop bridge cell itself to be non-sensory.
     intermediate_pool = pool[
         ~pool["superclass"].astype(str).isin({"descending_neuron", "vnc_motor"})
     ].copy()
@@ -490,10 +565,11 @@ def main(root: Path) -> None:
     if len(selected) != TARGET:
         raise AssertionError((len(selected), TARGET))
 
-    if not np.any(selected["route_turn"].to_numpy(np.float64) > 0):
-        raise AssertionError(
-            "selected set contains no non-zero published turn-route cell"
-        )
+    for route_name in ("route_forward", "route_turn", "route_escape"):
+        if not np.any(selected[route_name].to_numpy(np.float64) > 0):
+            raise AssertionError(
+                f"selected set contains no non-zero measured {route_name} cell"
+            )
 
     # Stable anatomical ordering: sensory channels first, then descending,
     # ascending, motor and the remaining central/intrinsic populations. This
@@ -589,8 +665,19 @@ def main(root: Path) -> None:
                     retained_desc_motor[src_desc, dst_mr] += int(d)
                     retained_desc_motor_edges += 1
 
-                src_is_intermediate = (src_desc == 0 and int(motor_role_selected[src_i]) == 0)
-                dst_is_intermediate = (dst_desc == 0 and dst_mr == 0)
+                # Intermediate/premotor cells are non-sensory, non-DN,
+                # non-MN retained neurons. This avoids counting a sensory
+                # feedback cell as the sole "premotor" bridge.
+                src_is_intermediate = (
+                    src_desc == 0
+                    and int(motor_role_selected[src_i]) == 0
+                    and int(channel_selected[src_i]) >= 4
+                )
+                dst_is_intermediate = (
+                    dst_desc == 0
+                    and dst_mr == 0
+                    and int(channel_selected[dst_i]) >= 4
+                )
                 if src_desc > 0 and dst_is_intermediate:
                     desc_to_intermediate.setdefault(src_i, set()).add(dst_i)
                     retained_desc_to_intermediate_edges += 1
@@ -599,6 +686,12 @@ def main(root: Path) -> None:
                     retained_intermediate_to_motor_edges += 1
         if bi % 50 == 0:
             print(f"edge pass batch {bi}/{reader.num_record_batches}", flush=True)
+
+    if retained_sensor_desc[0, 4] <= 0:
+        raise RuntimeError(
+            "No retained visual -> escape-DN contacts survived the reduction; "
+            "refusing to publish V1.03."
+        )
 
     # Count actual retained DN -> intermediate -> motor paths. Each path is a
     # real two-edge path in the published graph; no synthetic bridge is added.
@@ -678,7 +771,7 @@ def main(root: Path) -> None:
     meta = root / "app" / "src" / "main" / "java" / "com" / "example" / "flybrain" / "GeneratedConnectomeMeta.kt"
     motor_role_counts = {int(k): int(v) for k,v in selected.groupby("motor_role").size().to_dict().items()}
 
-    meta.write_text('package com.example.flybrain\n\nobject GeneratedConnectomeMeta {\n    const val VERSION = "MaleCNS v1.0 · FlyBrain V1.02"\n    const val FORMAT_MAGIC = "FBC102"\n    const val FORMAT_VERSION = 102\n    const val NEURONS = %d\n    const val EDGES = %d\n    const val CONTACTS_RETAINED = %dL\n    const val VIS_START = %d\n    const val VIS_END = %d\n    const val OLF_START = %d\n    const val OLF_END = %d\n    const val GUST_START = %d\n    const val GUST_END = %d\n    const val MECH_START = %d\n    const val MECH_END = %d\n    const val DESC_START = %d\n    const val DESC_END = %d\n    const val ASC_START = %d\n    const val ASC_END = %d\n    const val VMOTOR_START = %d\n    const val VMOTOR_END = %d\n    const val OTHER_START = %d\n    const val OTHER_END = %d\n    const val MOTOR_LEG = 1\n    const val MOTOR_WING = 2\n    const val MOTOR_HALTERE = 3\n    const val MOTOR_NECK = 4\n    const val MOTOR_ABDOMEN = 5\n    const val MOTOR_JUMP = 6\n    const val MOTOR_OTHER = 7\n}\n' % (TARGET, len(edges), contacts,
+    meta.write_text('package com.example.flybrain\n\nobject GeneratedConnectomeMeta {\n    const val VERSION = "MaleCNS v1.0 · FlyBrain V1.03"\n    const val FORMAT_MAGIC = "FBC102"\n    const val FORMAT_VERSION = 102\n    const val NEURONS = %d\n    const val EDGES = %d\n    const val CONTACTS_RETAINED = %dL\n    const val VIS_START = %d\n    const val VIS_END = %d\n    const val OLF_START = %d\n    const val OLF_END = %d\n    const val GUST_START = %d\n    const val GUST_END = %d\n    const val MECH_START = %d\n    const val MECH_END = %d\n    const val DESC_START = %d\n    const val DESC_END = %d\n    const val ASC_START = %d\n    const val ASC_END = %d\n    const val VMOTOR_START = %d\n    const val VMOTOR_END = %d\n    const val OTHER_START = %d\n    const val OTHER_END = %d\n    const val MOTOR_LEG = 1\n    const val MOTOR_WING = 2\n    const val MOTOR_HALTERE = 3\n    const val MOTOR_NECK = 4\n    const val MOTOR_ABDOMEN = 5\n    const val MOTOR_JUMP = 6\n    const val MOTOR_OTHER = 7\n}\n' % (TARGET, len(edges), contacts,
        ranges["visual"][0], ranges["visual"][1], ranges["olfactory"][0], ranges["olfactory"][1],
        ranges["gustatory"][0], ranges["gustatory"][1], ranges["mechanosensory"][0], ranges["mechanosensory"][1],
        desc[0], desc[1], asc[0], asc[1], vmotor[0], vmotor[1], other[0], other[1]))
@@ -698,11 +791,11 @@ def main(root: Path) -> None:
 
     report = {
         "dataset": "MaleCNS v1.0",
-        "flybrain_version": "1.02",
+        "flybrain_version": "1.03",
         "binary_format": "FBC102",
         "node_record_bytes": NODE_SIZE,
         "edge_record_bytes": EDGE_SIZE,
-        "selection": "exactly 16,669 traced annotated neurons; all descending and VNC motor neurons are retained; published neuron types are represented where possible; measured two-hop sensor-to-DN and DN-to-motor route cells are preferentially retained by functional family; remaining quota is stratified by superclass and ranked by route score then degree",
+        "selection": "exactly 16,669 traced annotated neurons; all descending and VNC motor neurons are retained; published neuron types are represented where possible; measured two-hop sensor-to-DN and DN-to-intermediate-to-motor route cells are preferentially retained by functional family; remaining quota is stratified by superclass and ranked by route score then degree",
         "source": BASE,
         "neurons_source": int(total),
         "neurons_retained": TARGET,
@@ -718,9 +811,17 @@ def main(root: Path) -> None:
         "unresolved_edges_policy": "edges with no recognized transmitter sign are omitted from direct current",
         "motor_role_counts": motor_role_counts,
         "descending_role_counts": {int(k): int(v) for k,v in selected.groupby("descending_role").size().to_dict().items()},
+        "descending_role_source_counts": {
+            str(i): int(role_counts_source[i]) for i in range(5)
+        },
+        "descending_type_role_counts": {
+            f"{k[0]}|role{k[1]}": int(v)
+            for k, v in selected[selected["superclass"].astype(str).eq("descending_neuron")]
+            .groupby(["type", "descending_role"]).size().to_dict().items()
+        },
         "motor_role_definition": "derived from curated annotation text for vnc_motor cells; runtime movement is driven only by measured vnc_motor activity",
-        "descending_role_definition": "derived from published annotation text; used as descriptive metadata and not as a synthetic current source",
-        "route_score_definition": "two-hop geometric-mean topology scores from published sensor->candidate->DN and DN->candidate->motor paths; used for selection and diagnostic weighting only",
+        "descending_role_definition": "published behavioural cell-type names plus conservative annotation keywords; descriptive metadata only and never a synthetic current source",
+        "route_score_definition": "route-family topology scores combine measured sensor->DN and DN->candidate->motor components from published edges; forward uses all sensory modalities, turn uses visual input, escape uses visual/mechanosensory threat input; scores are selection/readout metadata only and never create edges",
         "route_score_source_counts": source_route_counts,
         "route_score_selected_counts": selected_route_counts,
         "route_quota_requested": route_quota,

@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V1.02
+name: Build FlyBrain APK V1.03
 
 on:
   workflow_dispatch:
@@ -58,7 +58,7 @@ jobs:
       # ============================================================
       # 6. COMPROBAR ESTRUCTURA DEL REPOSITORIO
       # ============================================================
-      - name: Comprobar estructura V1.02
+      - name: Comprobar estructura V1.03
         run: |
           set -euo pipefail
 
@@ -76,9 +76,9 @@ jobs:
           echo "ESTRUCTURA DEL REPOSITORIO: OK"
 
       # ============================================================
-      # 7. IDENTIDAD V1.02
+      # 7. IDENTIDAD V1.03
       # ============================================================
-      - name: Comprobar identidad V1.02
+      - name: Comprobar identidad V1.03
         run: |
           set -euo pipefail
 
@@ -88,9 +88,9 @@ jobs:
           BUILDER="tools/build_connectome.py"
           WORKFLOW=".github/workflows/build-apk.yml"
 
-          grep -Fq 'versionCode = 102' "$APP"
-          grep -Fq 'versionName = "1.02"' "$APP"
-          grep -Fq 'FLYBRAIN V1.02' "$MAIN"
+          grep -Fq 'versionCode = 103' "$APP"
+          grep -Fq 'versionName = "1.03"' "$APP"
+          grep -Fq 'FLYBRAIN V1.03' "$MAIN"
           grep -Fq 'FORMAT_MAGIC = "FBC102"' "$META"
           grep -Fq 'FORMAT_VERSION = 102' "$META"
           grep -Fq 'NEURONS = 16669' "$META"
@@ -98,30 +98,22 @@ jobs:
           grep -Fq 'NODE_SIZE = 25' "$BUILDER"
           grep -Fq 'EDGE_SIZE = 12' "$BUILDER"
 
-          # Construimos las referencias legacy dinámicamente para que esta
-          # propia comprobación no se detecte a sí misma.
-          LEGACY_ZIP="FlyBrainV$(printf '101')_GitHub_Actions.zip"
-          LEGACY_MAGIC="FBC$(printf '101')"
-
-          if grep -Fq "$LEGACY_ZIP" "$WORKFLOW"; then
-            echo "ERROR: referencia de archivo V1.01 detectada en el workflow"
-            exit 1
-          fi
-
-          if grep -Fq "$LEGACY_MAGIC" "$WORKFLOW"; then
-            echo "ERROR: formato binario legacy detectado en el workflow"
-            exit 1
-          fi
-
           grep -Fq 'FBC102' "$WORKFLOW"
-          grep -Fq 'FlyBrain-V1.02-APK' "$WORKFLOW"
+          grep -Fq 'FlyBrain-V1.03-APK' "$WORKFLOW"
+          grep -Fq 'FORMAT_VERSION = 102' "$BUILDER"
 
-          echo "IDENTIDAD V1.02: OK"
+          if grep -Eq 'versionCode = 102|versionName = "1\\.02"|FLYBRAIN V1\\.02|flybrain_version": "1\\.02"' \
+              "$APP" "$MAIN" "$META" "$BUILDER"; then
+            echo "ERROR: referencia V1.02 detectada en archivos activos"
+            exit 1
+          fi
+
+          echo "IDENTIDAD V1.03: OK"
 
       # ============================================================
       # 8. PYTHON: SINTAXIS + REGRESION DE ARRAYS SELECCIONADOS
       # ============================================================
-      - name: Validar scripts Python V1.02
+      - name: Validar scripts Python V1.03
         run: |
           set -euo pipefail
 
@@ -154,7 +146,15 @@ jobs:
           assert "np.where(channel_selected == code)[0]" in s
           assert "np.where(channel == code)[0]" not in s
 
-          print("REGRESION SELECTED-ARRAYS: OK")
+          for token in ("dng100", "dng97", "dnb08", "dnp01"):
+              assert token in s.lower(), token
+
+          main_text = Path(
+              "app/src/main/java/com/example/flybrain/MainActivity.kt"
+          ).read_text()
+          assert "validateGeneratedMeta" in main_text
+
+          print("REGRESION SELECTED-ARRAYS + ROLES: OK")
           PY
 
       # ============================================================
@@ -170,7 +170,7 @@ jobs:
       # ============================================================
       # 10. GENERAR MALECNS REDUCIDO REAL
       # ============================================================
-      - name: Generar reducción real MaleCNS V1.02
+      - name: Generar reducción real MaleCNS V1.03
         run: |
           set -euo pipefail
 
@@ -210,7 +210,7 @@ jobs:
           d = json.loads(p.read_text())
 
           assert d["dataset"] == "MaleCNS v1.0"
-          assert d["flybrain_version"] == "1.02"
+          assert d["flybrain_version"] == "1.03"
           assert d["binary_format"] == "FBC102"
           assert d["neurons_retained"] == 16669
           assert d["node_record_bytes"] == 25
@@ -230,11 +230,20 @@ jobs:
 
           # Runtime population ranges must index the selected 16,669-node array.
           ranges = d["channel_ranges"]
-          for name in ("visual", "olfactory", "gustatory", "mechanosensory"):
+          previous = 0
+          for name in ("visual", "olfactory", "gustatory", "mechanosensory", "other"):
               pair = ranges[name]
               assert len(pair) == 2, (name, pair)
               start, end = map(int, pair)
               assert 0 <= start <= end <= 16669, (name, pair)
+              assert start == previous, (name, pair, previous)
+              previous = end
+          assert previous == 16669
+
+          role_counts = d["descending_role_counts"]
+          assert int(role_counts.get("1", 0)) > 0
+          assert int(role_counts.get("2", 0)) > 0
+          assert int(role_counts.get("4", 0)) > 0
 
           rs = d["route_score_selected_counts"]
 
@@ -255,6 +264,7 @@ jobs:
 
           assert len(desc_motor) == 5
           assert all(len(r) == 8 for r in desc_motor)
+          assert sensor_desc[0][4] > 0
 
           assert sum(map(sum, sensor_desc)) > 0
           # The direct DN->MN matrix is diagnostic only; it may legitimately be
@@ -488,12 +498,15 @@ jobs:
             exit 1
           fi
 
+          grep -Fq 'if (danger > .68f && lastDangerLevel <= .68f && escapeNeural)' "$MAIN"
+          grep -Fq 'if (foodOn && foodDistance < .055f && gustatoryRateNow > .04f' "$MAIN"
+
           echo "INTEGRIDAD CAUSAL: OK"
 
       # ============================================================
       # 17. KOTLIN ESTRUCTURAL
       # ============================================================
-      - name: Validar estructura Kotlin V1.02
+      - name: Validar estructura Kotlin V1.03
         run: |
           set -euo pipefail
 
@@ -531,10 +544,10 @@ jobs:
           test -s app/src/main/res/raw/malecns_reduced.bin
           test -s app/src/main/res/raw/malecns_reduced_report.json
 
-          grep -Fq 'versionCode = 102' \
+          grep -Fq 'versionCode = 103' \
             app/build.gradle.kts
 
-          grep -Fq 'versionName = "1.02"' \
+          grep -Fq 'versionName = "1.03"' \
             app/build.gradle.kts
 
           grep -Fq 'FORMAT_VERSION = 102' \
@@ -543,7 +556,7 @@ jobs:
           grep -Fq 'NEURONS = 16669' \
             app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
 
-          grep -Fq '"flybrain_version": "1.02"' \
+          grep -Fq '"flybrain_version": "1.03"' \
             app/src/main/res/raw/malecns_reduced_report.json
 
           grep -Fq '"binary_format": "FBC102"' \
@@ -554,7 +567,7 @@ jobs:
       # ============================================================
       # 19. COMPILAR APK
       # ============================================================
-      - name: Compilar APK V1.02
+      - name: Compilar APK V1.03
         run: |
           set -euo pipefail
 
@@ -564,7 +577,7 @@ jobs:
       # ============================================================
       # 20. VERIFICAR APK REAL
       # ============================================================
-      - name: Verificar APK V1.02
+      - name: Verificar APK V1.03
         run: |
           set -euo pipefail
 
@@ -586,10 +599,10 @@ jobs:
             grep -Fq "package: name='com.example.flybrain'"
 
           echo "$BADGING" | \
-            grep -Fq "versionCode='102'"
+            grep -Fq "versionCode='103'"
 
           echo "$BADGING" | \
-            grep -Fq "versionName='1.02'"
+            grep -Fq "versionName='1.03'"
 
           unzip -l "$APK" | \
             grep -Fq 'malecns_reduced.bin'
@@ -597,7 +610,7 @@ jobs:
           unzip -l "$APK" | \
             grep -Fq 'malecns_reduced_report.json'
 
-          echo "APK V1.02 VALIDADO"
+          echo "APK V1.03 VALIDADO"
 
           ls -lh "$APK"
 
@@ -606,10 +619,10 @@ jobs:
       # ============================================================
       # 21. SUBIR APK
       # ============================================================
-      - name: Subir APK V1.02
+      - name: Subir APK V1.03
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V1.02-APK
+          name: FlyBrain-V1.03-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

@@ -1,7 +1,7 @@
-# FlyBrain V1.02
+# FlyBrain V1.03
 
 ## Objetivo
-V1.02 mantiene exactamente 16.669 neuronas del MaleCNS v1.0 y da prioridad explícita a la preservación de rutas funcionales medidas en el conectoma reducido. La selección ya no depende únicamente de grado/superclase: se conservan preferentemente neuronas intermedias que participan en rutas de dos saltos `sensor -> célula -> DN` y `DN -> célula -> MN`, separando familias de avance, orientación/giro, escape y sensorimotora general.
+V1.03 mantiene exactamente 16.669 neuronas del MaleCNS v1.0 y da prioridad explícita a la preservación de rutas funcionales medidas en el conectoma reducido. La selección ya no depende únicamente de grado/superclase: se conservan preferentemente neuronas intermedias que participan en rutas de dos saltos `sensor -> célula -> DN` y `DN -> célula -> MN`, separando familias de avance, orientación/giro, escape y sensorimotora general.
 
 El movimiento del cuerpo virtual sigue procediendo exclusivamente de actividad medida de neuronas motoras VNC retenidas. Las etiquetas de DN/MN y las puntuaciones de ruta son metadatos derivados del conectoma y no crean conexiones artificiales.
 
@@ -11,14 +11,14 @@ https://male-cns.janelia.org/download/
 
 Berg et al., *Cell* (2026), “Sexual dimorphism in the complete connectome of the Drosophila male central nervous system”, DOI 10.1016/j.cell.2026.08.015.
 
-## Arquitectura V1.02
+## Arquitectura V1.03
 
 ### Selección connectómica
 - 16.669 neuronas exactamente.
 - Todos los `descending_neuron` y `vnc_motor` anotados se conservan cuando forman parte del censo trazado.
 - Se conserva diversidad de tipos publicados.
 - Se añade selección por rutas de dos saltos medidas en el grafo publicado.
-- Se priorizan rutas olfato→forward, visual→turn, visual/mecano→escape y DN→motor.
+- Se priorizan rutas sensorial→forward, visual→turn, visual/mecano→escape y DN→intermedia→MN.
 - Las aristas embebidas son exclusivamente aristas publicadas entre neuronas retenidas.
 
 ### Metadatos de rutas
@@ -67,6 +67,6 @@ El binario FBC102 tiene:
 Si el connectome falla al cargar, la aplicación entra en `fail-closed`: no se crea una red neuronal alternativa.
 
 ## Limitaciones científicas
-La reducción a 16.669 neuronas es un subconjunto del MaleCNS completo, no un décimo espacial exacto de cada circuito. Las puntuaciones de ruta son una herramienta de preservación topológica, no una afirmación de que cada neurona tenga una función conductual única. La dinámica LIF, el signo neurotransmisor-resuelto y la mecánica corporal siguen siendo aproximaciones computacionales.
+La reducción a 16.669 neuronas es un subconjunto del MaleCNS completo, no un décimo espacial exacto de cada circuito. Las puntuaciones de ruta son una herramienta de preservación topológica, no una afirmación de que cada neurona tenga una función conductual única. Los roles DN usan nombres de tipos publicados cuando existe evidencia funcional establecida (por ejemplo DNg100/DNg97/DNb08 para marcha y DNp01/Giant Fiber para escape). La selección de escape protege también las entradas visuales hacia el DNp01 (LC4/LPLC2) cuando están presentes en las anotaciones y aristas retenidas. La dinámica LIF, el signo neurotransmisor-resuelto y la mecánica corporal siguen siendo aproximaciones computacionales.
 
 En particular, el glutamato se modela como inhibitorio en esta reducción siguiendo la convención empleada en simulaciones recientes del VNC de Drosophila; no se representan excepciones dependientes del receptor.

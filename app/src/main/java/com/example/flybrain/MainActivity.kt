@@ -123,7 +123,7 @@ class MainActivity : Activity() {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val rng = Random(9301)
 
-        // V1.02: exactly 16,669 simulated neurons. The graph is generated at
+        // V1.03: exactly 16,669 simulated neurons. The graph is generated at
         // build time from the public MaleCNS v1.0 tables: neurons are sampled
         // within the published superclasses and retained edges are real
         // body-to-body connections from the source connectome.
@@ -160,7 +160,7 @@ class MainActivity : Activity() {
         private val routeTurn = FloatArray(N)
         private val routeEscape = FloatArray(N)
         private val refractory = FloatArray(N)
-        // V1.02: short-lived chemical synaptic trace (~45 ms).
+        // V1.03: short-lived chemical synaptic trace (~45 ms).
         private val synTrace = FloatArray(N)
 
         private val incoming = Array(N) { IntArray(0) }
@@ -229,7 +229,7 @@ class MainActivity : Activity() {
         private var brakeMotor = 0f
         private var exploreMotor = 0f
 
-        // V1.02: action-selection populations. These are readouts of measured
+        // V1.03: action-selection populations. These are readouts of measured
         // descending/VNC activity, not direct stimulus-to-body commands.
         private var approachAction = 0f
         private var exploreAction = 0f
@@ -250,7 +250,7 @@ class MainActivity : Activity() {
         private var dangerDirectionalBias = 0f
         private var dangerLoom = 0f
 
-        // V1.02: endogenous locomotor state. This is deliberately not a
+        // V1.03: endogenous locomotor state. This is deliberately not a
         // stimulus-to-movement rule. It is a weak, seeded stochastic current
         // applied to non-motor central/VNC neurons, allowing the retained
         // recurrent network to enter and leave exploratory states.
@@ -272,7 +272,7 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.02 · DIAGNÓSTICO\n")
+            append("FLYBRAIN V1.03 · DIAGNÓSTICO\n")
             append("16.669 neuronas · MaleCNS v1.0 reducido · sin atajo estímulo→cuerpo\n")
             append(if (connectomeLoaded) "CONNECTOME: OK · ${loadedEdgeCount} conexiones retenidas\n" else "CONNECTOME: ERROR · $connectomeError\n")
             append("SENS V/O/G/M: ${(visualRateDisplay*100).toInt()} / ${(olfactoryRateDisplay*100).toInt()} / ${(gustatoryRateDisplay*100).toInt()} / ${(mechanosensoryRateDisplay*100).toInt()}%\n")
@@ -450,13 +450,41 @@ class MainActivity : Activity() {
             }
         }
 
-        private fun loadMeasuredConnectome(): Boolean {
-            val resourceId = resources.getIdentifier("malecns_reduced", "raw", packageName)
-            if (resourceId == 0) {
-                connectomeError = "recurso malecns_reduced no encontrado"
-                return false
+        private fun validateGeneratedMeta() {
+            val ranges = arrayOf(
+                intArrayOf(VIS_START, VIS_END),
+                intArrayOf(OLF_START, OLF_END),
+                intArrayOf(GUST_START, GUST_END),
+                intArrayOf(MECH_START, MECH_END),
+                intArrayOf(DESC_START, DESC_END),
+                intArrayOf(ASC_START, ASC_END),
+                intArrayOf(MOTOR_START, MOTOR_END),
+                intArrayOf(OTHER_START, OTHER_END),
+            )
+            var previous = 0
+            for (pair in ranges) {
+                val start = pair[0]
+                val end = pair[1]
+                if (start < 0 || end < start || end > N || start != previous) {
+                    throw IllegalStateException(
+                        "rangos de poblacion invalidos: $start..$end (N=$N, prev=$previous)"
+                    )
+                }
+                previous = end
             }
+            if (previous != N) {
+                throw IllegalStateException("rangos no cubren exactamente N=$N (fin=$previous)")
+            }
+        }
+
+        private fun loadMeasuredConnectome(): Boolean {
             return try {
+                validateGeneratedMeta()
+                val resourceId = resources.getIdentifier("malecns_reduced", "raw", packageName)
+                if (resourceId == 0) {
+                    connectomeError = "recurso malecns_reduced no encontrado"
+                    return false
+                }
                 val bytes = resources.openRawResource(resourceId).use { it.readBytes() }
                 val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
                 if (b.remaining() < 16) throw IllegalStateException("cabecera incompleta")
@@ -578,6 +606,9 @@ class MainActivity : Activity() {
         }
 
         private fun injectSensoryPopulation(start: Int, end: Int, pattern: FloatArray, gain: Float) {
+            if (start < 0 || end < start || end > N) {
+                throw IllegalStateException("poblacion sensorial fuera de rango: $start..$end / N=$N")
+            }
             val size = end - start
             if (size <= 0 || pattern.isEmpty()) return
             for (i in 0 until size) {
@@ -649,14 +680,14 @@ class MainActivity : Activity() {
         private fun stepBrain(dt: Float) {
             for (i in 0 until N) prevFired[i] = fired[i]
 
-            // V1.02: a spike creates a short-lived synaptic trace. The temporal
+            // V1.03: a spike creates a short-lived synaptic trace. The temporal
             // trace is applied to the published retained graph; it does not alter topology.
             val synDecay = exp((-dt / .045f).toDouble()).toFloat()
             for (i in 0 until N) {
                 synTrace[i] = (synTrace[i] * synDecay + if (prevFired[i]) 1f else 0f).coerceAtMost(3f)
             }
 
-            // V1.02: internal locomotor state. This is a modulatory input to
+            // V1.03: internal locomotor state. This is a modulatory input to
             // central/descending neurons, not a body-level movement command.
             // The body can move only if measured VNC motor neurons actually fire.
             explorationPhase += dt * (1.35f + explorationState * .55f)
@@ -701,9 +732,9 @@ class MainActivity : Activity() {
                 for (k in src.indices) {
                     syn += w[k] * synTrace[src[k]]
                 }
-                // Do not clip the raw summed synaptic drive before gain. V1.02
+                // Do not clip the raw summed synaptic drive before gain. V1.03
                 // was saturating at +/-0.38 and suppressing long multi-hop paths.
-                // V1.02 applies a single physiologically-inspired current ceiling
+                // V1.03 applies a single physiologically-inspired current ceiling
                 // after population-specific gain.
                 syn = syn.coerceIn(-.75f, .75f)
 
@@ -778,7 +809,7 @@ class MainActivity : Activity() {
             return if (total == 0) 0f else firedCount.toFloat() / total.toFloat()
         }
 
-        // V1.02: competitive action readout. Each action requires measured
+        // V1.03: competitive action readout. Each action requires measured
         // neural evidence first; sensory context only gates that evidence.
         // This keeps the causal direction: sensory input -> connectome activity
         // -> action population -> measured VNC motor output.
@@ -953,7 +984,7 @@ class MainActivity : Activity() {
             // originates from measured VNC motor activity. Left/right asymmetry in
             // leg and neck output changes heading; leg output supplies walking force.
             val rawTurn = ((rightLeg - leftLeg) + (neckActivity * 0.22f)) * 1.55f
-            // V1.02: remove only a slowly learned idle bilateral bias. This is
+            // V1.03: remove only a slowly learned idle bilateral bias. This is
             // proprioceptive/homeostatic normalization, not a stimulus-to-turn
             // rule. Once an external sensory state is present, the raw neural
             // asymmetry is allowed to steer normally.
@@ -969,7 +1000,7 @@ class MainActivity : Activity() {
             // produce a small measurable body force, while the source remains
             // exclusively the measured VNC motor population.
             val recruitedLeg = sqrt(legActivity.coerceAtLeast(0f))
-            // V1.02: speed remains an output of measured motor neurons. The
+            // V1.03: speed remains an output of measured motor neurons. The
             // nonlinear recruitment is softened so low firing does not become
             // almost-maximal locomotion in the UI/body.
             val cmdSpeed = (recruitedLeg * .008f + jumpImpulse).coerceIn(-.002f, .012f)
@@ -1027,7 +1058,7 @@ class MainActivity : Activity() {
             centralDisplay = .88f * centralDisplay + .12f * ((centralRate + descendingRate + ascendingRate) / 3f)
             motorDisplay = .88f * motorDisplay + .12f * motorRate
 
-            // Update measured motor traces BEFORE action selection. V1.02 read the
+            // Update measured motor traces BEFORE action selection. V1.03 read the
             // previous tick's motor traces, adding avoidable one-step lag.
             leftMotor = .82f * leftMotor + .18f * leftLeg
             rightMotor = .82f * rightMotor + .18f * rightLeg
@@ -1043,7 +1074,7 @@ class MainActivity : Activity() {
             updateActionSelection(dt, visualRate, olfactoryRate, gustatoryRate, mechanosensoryRate, motorRate)
 
             // Escape events are counted only after the current neural action score
-            // has been updated, avoiding the one-tick lag present in V1.02.
+            // has been updated, avoiding the one-tick lag present in V1.03.
             val escapeNeural = escapeAction > .16f &&
                 (descendingRateDisplay > .01f || escapeRouteActivityDisplay > .01f || motorRateDisplay > .01f)
             if (danger > .68f && lastDangerLevel <= .68f && escapeNeural) escapeEvents++
@@ -1150,7 +1181,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.color = Color.WHITE
             paint.textSize = 16f
-            c.drawText(if (connectomeLoaded) "CEREBRO · MaleCNS REDUCIDO · ACTIVIDAD V1.02" else "CEREBRO · CONNECTOME NO CARGADO", 20f, top + 23f, paint)
+            c.drawText(if (connectomeLoaded) "CEREBRO · MaleCNS REDUCIDO · ACTIVIDAD V1.03" else "CEREBRO · CONNECTOME NO CARGADO", 20f, top + 23f, paint)
             bar(c, "SENSORIAL", sensoryDisplay, top + 30f, Color.rgb(52, 195, 110))
             bar(c, "INTEGRACIÓN", centralDisplay, top + 55f, Color.rgb(80, 145, 225))
             bar(c, "DESCENDENTES", descendingRateDisplay, top + 80f, Color.rgb(160, 110, 225))
@@ -1173,7 +1204,7 @@ class MainActivity : Activity() {
             paint.color = Color.rgb(205, 210, 212)
             paint.textSize = 8f
             paint.typeface = Typeface.DEFAULT
-            c.drawText("MaleCNS v1.0 · 16.669 neuronas · conectividad publicada reducida · rutas 2-hop · V1.02", 20f, height - 7f, paint)
+            c.drawText("MaleCNS v1.0 · 16.669 neuronas · conectividad publicada reducida · rutas 2-hop · V1.03", 20f, height - 7f, paint)
         }
 
         private fun bar(c: Canvas, label: String, value: Float, y: Float, accent: Int) {
