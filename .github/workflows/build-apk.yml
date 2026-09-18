@@ -1,11 +1,11 @@
-name: Build FlyBrain APK V0.94 FIXED
+name: Build FlyBrain APK V0.95
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - principal
       - main
+      - principal
 
 jobs:
   build:
@@ -36,65 +36,64 @@ jobs:
           gradle-version: '8.9'
 
 
-      - name: Comprobar ZIP V0.94
+      - name: Comprobar ZIP V0.95
         run: |
           set -e
 
-          echo "Buscando archivo del proyecto..."
+          echo "Buscando proyecto V0.95..."
 
-          test -f "FlyBrainV094_FIXED_GitHub_Actions.zip"
+          test -f "FlyBrainV095_GitHub_Actions.zip"
 
           echo "ZIP encontrado correctamente:"
-          ls -lh "FlyBrainV094_FIXED_GitHub_Actions.zip"
+          ls -lh "FlyBrainV095_GitHub_Actions.zip"
 
 
-      - name: Descomprimir proyecto V0.94 FIXED
+      - name: Descomprimir proyecto V0.95
         run: |
           set -e
 
           rm -rf proyecto
           mkdir -p proyecto
 
-          unzip -q "FlyBrainV094_FIXED_GitHub_Actions.zip" -d proyecto
+          unzip -q "FlyBrainV095_GitHub_Actions.zip" -d proyecto
 
           echo "========================================"
-          echo "Proyecto descomprimido correctamente"
+          echo "PROYECTO V0.95 DESCOMPRIMIDO"
           echo "========================================"
 
           find proyecto -maxdepth 4 -type f | sort
 
 
-      - name: Verificar proyecto V0.94 FIXED
+      - name: Verificar proyecto V0.95
         run: |
           set -e
 
           test -f "proyecto/app/build.gradle.kts"
           test -f "proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
 
-          grep -Fq 'versionCode = 94' \
+          grep -Fq 'versionCode = 95' \
             "proyecto/app/build.gradle.kts"
 
-          grep -Fq 'versionName = "0.94"' \
+          grep -Fq 'versionName = "0.95"' \
             "proyecto/app/build.gradle.kts"
 
-          grep -Fq 'FLYBRAIN V0.94' \
+          grep -Fq 'FLYBRAIN V0.95' \
             "proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
 
           grep -Fq 'N = 16669' \
             "proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
 
           echo "========================================"
-          echo "PROYECTO V0.94 FIXED CORRECTO"
+          echo "PROYECTO V0.95 CORRECTO"
           echo "========================================"
-          echo "Version: 0.94"
-          echo "VersionCode: 94"
+          echo "Version: 0.95"
+          echo "VersionCode: 95"
           echo "Neuronas: 16.669"
-          echo "LIF adaptativo + plasticidad"
-          echo "Navegacion y estados premotores"
-          echo "Respuesta a comida, luz y peligro"
-          echo "Aproximacion a comida reforzada"
-          echo "Modelo visual 2D mejorado"
-          echo "Correccion de compilacion aplicada"
+          echo "Arquitectura basada en MaleCNS"
+          echo "Connectome-driven"
+          echo "LIF"
+          echo "VNC"
+          echo "Feedback sensorimotor"
           echo "========================================"
 
 
@@ -113,7 +112,7 @@ jobs:
           test -f "proyecto/app/build/outputs/apk/debug/app-debug.apk"
 
           echo "========================================"
-          echo "APK V0.94 FIXED GENERADO CORRECTAMENTE"
+          echo "APK V0.95 GENERADO CORRECTAMENTE"
           echo "========================================"
 
           ls -lh "proyecto/app/build/outputs/apk/debug/app-debug.apk"
@@ -122,6 +121,6 @@ jobs:
       - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V0.94-FIXED-APK
+          name: FlyBrain-V0.95-APK
           path: proyecto/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
