@@ -280,7 +280,13 @@ def main(root: Path) -> None:
     threat_escape = np.sqrt(np.maximum(0.0, (sensor_in[0] + sensor_in[3]) * cell_to_desc[4]))
 
     forward_motor_path = np.sqrt(np.maximum(0.0, desc_to_cell[1] * cell_to_motor[1]))
-    turn_motor_path = np.sqrt(np.maximum(0.0, desc_to_cell[2] * cell_to_motor[1]))
+    # Turning is not restricted to leg motor neurons. Use all curated VNC
+    # motor-role outputs for the descriptive turn-route score.
+    turn_motor_outputs = cell_to_motor[1:].sum(axis=0)
+    turn_motor_path = np.sqrt(
+        np.maximum(0.0, desc_to_cell[2] * turn_motor_outputs)
+    )
+
     escape_motor_path = np.sqrt(np.maximum(
         0.0,
         desc_to_cell[4] * (cell_to_motor[1] + cell_to_motor[2] + cell_to_motor[6])
@@ -359,8 +365,7 @@ def main(root: Path) -> None:
     # by the forced/type-diversity stages. Ascending neurons remain eligible as
     # measured intermediate/feedback cells.
     intermediate_pool = pool[
-        (pool["channel"] >= 4)
-        & (~pool["superclass"].astype(str).isin({"descending_neuron", "vnc_motor"}))
+        ~pool["superclass"].astype(str).isin({"descending_neuron", "vnc_motor"})
     ].copy()
 
     # Reserve route cells by functional family. Quotas are capped by the
@@ -373,11 +378,37 @@ def main(root: Path) -> None:
     }
     route_parts = []
     route_ids = set()
+
+    # Reserve measured positive turn-route cells first. This prevents the turn
+    # family from losing its entire effective quota to earlier route families.
+    positive_turn = intermediate_pool[
+        intermediate_pool["route_turn"] > 0
+    ].sort_values(
+        ["route_turn", "route_score", "degree", "bodyId"],
+        ascending=[False, False, False, True],
+    )
+
+    if len(positive_turn) and remaining_slots > 0:
+        take_turn = min(
+            route_quota["route_turn"],
+            remaining_slots,
+            len(positive_turn),
+        )
+        turn_part = positive_turn.head(take_turn)
+        route_parts.append(turn_part)
+        route_ids.update(turn_part.bodyId.astype(int).tolist())
+        remaining_slots -= len(turn_part)
+
     for score_col, quota in route_quota.items():
         if remaining_slots <= 0:
             break
+        if score_col == "route_turn":
+            continue
+
         take = min(quota, remaining_slots)
-        candidates = intermediate_pool[~intermediate_pool.bodyId.isin(route_ids)].sort_values(
+        candidates = intermediate_pool[
+            ~intermediate_pool.bodyId.isin(route_ids)
+        ].sort_values(
             [score_col, "route_score", "degree", "bodyId"],
             ascending=[False, False, False, True],
         )
@@ -454,6 +485,11 @@ def main(root: Path) -> None:
     selected = selected.drop_duplicates("bodyId").reset_index(drop=True)
     if len(selected) != TARGET:
         raise AssertionError((len(selected), TARGET))
+
+    if not np.any(selected["route_turn"].to_numpy(np.float64) > 0):
+        raise AssertionError(
+            "selected set contains no non-zero turn-route cell"
+        )
 
     # Stable anatomical ordering: sensory channels first, then descending,
     # ascending, motor and the remaining central/intrinsic populations. This
