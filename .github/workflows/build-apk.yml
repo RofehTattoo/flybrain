@@ -33,15 +33,15 @@ jobs:
         run: |
           mkdir proyecto
           mkdir proyecto_tmp
-          unzip -q FlyBrainV05_GitHub_Actions.zip -d proyecto_tmp
-          cp -r proyecto_tmp/FlyBrainV05_GitHub_Actions/. proyecto/
+          unzip -q FlyBrainV06_GitHub_Actions.zip -d proyecto_tmp
+          cp -r proyecto_tmp/FlyBrainV06_GitHub_Actions/. proyecto/
           rm -rf proyecto_tmp
 
       - name: Verificar proyecto
         run: |
           test -f proyecto/app/build.gradle.kts
           test -f proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
-          echo "Proyecto V0.5 encontrado correctamente"
+          echo "Proyecto V0.6 encontrado correctamente"
 
       - name: Compilar APK
         working-directory: proyecto
@@ -50,5 +50,5 @@ jobs:
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V0.5-APK
+          name: FlyBrain-V0.6-APK
           path: proyecto/app/build/outputs/apk/debug/app-debug.apk
