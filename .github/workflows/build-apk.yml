@@ -34,7 +34,7 @@ jobs:
           mkdir proyecto
           unzip -q FlyBrainV01_GitHub_Actions.zip -d proyecto
 
-      - name: Corregir versión Java
+      - name: Configurar Java 17
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -42,21 +42,21 @@ jobs:
           p = Path("proyecto/app/build.gradle.kts")
           s = p.read_text()
 
-          s = s.replace("JavaVersion.VERSION_1_8", "JavaVersion.VERSION_17")
-          s = s.replace('jvmTarget = "1.8"', 'jvmTarget = "17"')
-          s = s.replace('JvmTarget.JVM_1_8', 'JvmTarget.JVM_17')
+          s = s.replace(
+              "    compileSdk = 35",
+              """    compileSdk = 35
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }"""
+          )
 
           p.write_text(s)
 
-          print("Configuración Java/Kotlin corregida:")
-          for line in s.splitlines():
-              if "JavaVersion" in line or "jvmTarget" in line or "JvmTarget" in line:
-                  print(line)
+          print("=== build.gradle.kts corregido ===")
+          print(s)
           PY
-
-      - name: Verificar configuración
-        run: |
-          grep -RniE "VERSION_1_8|JVM_1_8|jvmTarget|sourceCompatibility|targetCompatibility" proyecto/app/build.gradle.kts || true
 
       - name: Compilar APK
         working-directory: proyecto
