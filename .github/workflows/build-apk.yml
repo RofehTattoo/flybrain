@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V0.93
+name: Build FlyBrain APK V0.94
 
 on:
   workflow_dispatch:
@@ -14,68 +14,62 @@ jobs:
       - name: Descargar proyecto
         uses: actions/checkout@v4
 
-
       - name: Preparar Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-
       - name: Preparar Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-35 build-tools;35.0.0'
-
 
       - name: Instalar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-
-      - name: Descomprimir proyecto V0.93
+      - name: Descomprimir proyecto V0.94
         run: |
           set -e
 
           rm -rf proyecto
           mkdir -p proyecto
 
-          unzip -q FlyBrainV093_GitHub_Actions.zip -d proyecto
+          unzip -q FlyBrainV094_GitHub_Actions.zip -d proyecto
 
           echo "========================================"
           echo "Contenido del proyecto:"
           find proyecto -maxdepth 4 -type f | sort
           echo "========================================"
 
-
-      - name: Verificar proyecto V0.93
+      - name: Verificar proyecto V0.94
         run: |
           set -e
 
           test -f proyecto/app/build.gradle.kts
           test -f proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
 
-          grep -q 'versionCode = 93' proyecto/app/build.gradle.kts
-          grep -q 'versionName = "0.93"' proyecto/app/build.gradle.kts
-          grep -q 'FLYBRAIN V0.93' proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -q 'versionCode = 94' proyecto/app/build.gradle.kts
+          grep -q 'versionName = "0.94"' proyecto/app/build.gradle.kts
+          grep -q 'FLYBRAIN V0.94' proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -q 'N = 16669' proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
 
           echo "========================================"
-          echo "PROYECTO V0.93 CORRECTO"
+          echo "PROYECTO V0.94 CORRECTO"
           echo "16.669 neuronas"
-          echo "Arquitectura neuronal V0.93"
           echo "LIF adaptativo + plasticidad"
           echo "Navegación y estados premotores"
           echo "Respuesta a comida, luz y peligro"
+          echo "Aproximación a comida reforzada"
+          echo "Modelo visual 2D mejorado"
           echo "========================================"
-
 
       - name: Compilar APK
         working-directory: proyecto
         run: |
           gradle :app:assembleDebug --stacktrace
-
 
       - name: Verificar APK
         run: |
@@ -84,15 +78,14 @@ jobs:
           test -f proyecto/app/build/outputs/apk/debug/app-debug.apk
 
           echo "========================================"
-          echo "APK V0.93 GENERADO CORRECTAMENTE"
+          echo "APK V0.94 GENERADO CORRECTAMENTE"
           echo "========================================"
 
           ls -lh proyecto/app/build/outputs/apk/debug/app-debug.apk
 
-
       - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V0.93-APK
+          name: FlyBrain-V0.94-APK
           path: proyecto/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
