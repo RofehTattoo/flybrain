@@ -110,56 +110,29 @@ def classify_motor_role(row) -> int:
 
 
 def classify_descending_role(row) -> int:
-    """Classify curated descending neurons using documented cell-type identities.
-
+    """Classify curated descending neurons by published annotation text.
     0=generic/unknown, 1=forward/walking, 2=turn/steering,
-    3=backward, 4=fast looming escape.
-
-    This is descriptive metadata only: it never creates or changes connectome
-    edges. The escape class is deliberately restricted to DNp01/Giant Fiber,
-    the identified fast looming-escape descending neuron.
+    3=backward, 4=escape. This is descriptive metadata only; it does not
+    create or alter connectome edges.
     """
     sc = clean(row.get("superclass", ""))
     if sc != "descending_neuron":
         return 0
-
     fields = []
     for c in ("type", "class", "subclass", "primary_neuropil", "target", "annotation"):
         if c in row.index:
             fields.append(clean(row.get(c, "")))
     text = " ".join(fields).lower()
-
-    # Backward walking: MDN (DNp50) is the canonical command neuron.
-    if any(k in text for k in (
-        "mdn", "dnp50", "moonwalker", "moonwalker descending",
-        "backward walking", "backing up"
-    )):
+    if any(k in text for k in ("mdn", "moonwalker", "backward")):
         return 3
-
-    # Fast looming escape: Giant Fiber / DNp01.
-    # Keep this narrow rather than assigning every neuron whose annotation
-    # contains the generic word "escape".
-    if any(k in text for k in (
-        "dnp01", "giant fiber", "giant-fiber", "giant fibre", "giant-fibre"
-    )):
+    if any(k in text for k in ("escape", "giant fiber", "giant-fiber")):
         return 4
-
-    # Steering / rotational-control DNs documented in walking flies.
-    if any(k in text for k in (
-        "dna01", "dna02", "dng13", "dna11", "dnb05", "dnb06",
-        "turning", "steering", "rotational velocity", "rotational-velocity"
-    )):
+    if any(k in text for k in ("dnap02", "dnap03")):
         return 2
-
-    # Forward-walking / leg-CPG-associated DNs with documented locomotor
-    # function. DNg100 is the identified walking command neuron; DNg97 is
-    # associated with forward walking; DNb08 drives rhythmic leg movement.
-    if any(k in text for k in (
-        "dng100", "dng97", "dnb08",
-        "forward walking", "forward-walking"
-    )):
+    if any(k in text for k in ("dna02", "dna03", "dna04", "dnb01", "turn", "steer", "turning", "pfl3")):
+        return 2
+    if any(k in text for k in ("walk", "forward", "pfl2")):
         return 1
-
     return 0
 
 def main(root: Path) -> None:
@@ -302,28 +275,9 @@ def main(root: Path) -> None:
     # Two-hop route scores. Geometric means prevent a cell with only one strong
     # side of a route from dominating. The scores are used for neuron selection
     # and are also embedded as descriptive runtime metadata; they never alter an edge.
-    # Forward route: measured sensory input into documented walking DNs.
-    # This is a topology-selection score, not a synthetic runtime drive.
-    forward_sensor_path = np.sqrt(
-        np.maximum(0.0, sensor_in.sum(axis=0) * cell_to_desc[1])
-    )
+    olf_forward = np.sqrt(np.maximum(0.0, sensor_in[1] * cell_to_desc[1]))
     visual_turn = np.sqrt(np.maximum(0.0, sensor_in[0] * cell_to_desc[2]))
-
-    # Looming escape is kept anatomically specific: LC4/LPLC2 are the
-    # documented visual projection neurons that provide the major optic-lobe
-    # input to DNp01/Giant Fiber. Only visual input to those cell types is
-    # counted here; generic "danger" or mechanosensory input is not used to
-    # manufacture an escape route.
-    type_text = (
-        traced["type"].fillna("").astype(str).str.lower()
-        if "type" in traced.columns
-        else pd.Series([""] * len(traced), index=traced.index)
-    )
-    looming_candidate = type_text.str.contains(r"lc4|lplc2", regex=True).to_numpy()
-    looming_escape_input = np.where(looming_candidate, sensor_in[0], 0.0)
-    threat_escape = np.sqrt(
-        np.maximum(0.0, looming_escape_input * cell_to_desc[4])
-    )
+    threat_escape = np.sqrt(np.maximum(0.0, (sensor_in[0] + sensor_in[3]) * cell_to_desc[4]))
 
     forward_motor_path = np.sqrt(np.maximum(0.0, desc_to_cell[1] * cell_to_motor[1]))
     # Turning/steering can recruit coordinated motor outputs. The route score
@@ -337,7 +291,7 @@ def main(root: Path) -> None:
         desc_to_cell[4] * (cell_to_motor[1] + cell_to_motor[2] + cell_to_motor[6])
     ))
 
-    route_forward = forward_sensor_path + forward_motor_path
+    route_forward = olf_forward + forward_motor_path
     route_turn = visual_turn + turn_motor_path
     route_escape = threat_escape + escape_motor_path
     route_sensorimotor = np.sqrt(np.maximum(
@@ -636,9 +590,13 @@ def main(root: Path) -> None:
     edges = normalized_edges
     edges.sort(key=lambda e: (e[1], e[0]))
 
+    # Runtime ranges MUST use the final 16,669-node selected array.
+    # `channel` indexes the full source table (166,691 neurons), so using it
+    # here can generate ranges outside the reduced Android array.
+    selected_channel = selected["channel"].to_numpy(np.int8)
     ranges = {}
     for code, name in [(0,"visual"),(1,"olfactory"),(2,"gustatory"),(3,"mechanosensory"),(4,"other")]:
-        idxs = np.where(channel == code)[0]
+        idxs = np.where(selected_channel == code)[0]
         ranges[name] = [int(idxs.min()), int(idxs.max()+1)] if len(idxs) else [0,0]
 
     sc_list = sorted(selected["superclass"].astype(str).unique().tolist())
@@ -693,20 +651,6 @@ def main(root: Path) -> None:
        ranges["gustatory"][0], ranges["gustatory"][1], ranges["mechanosensory"][0], ranges["mechanosensory"][1],
        desc[0], desc[1], asc[0], asc[1], vmotor[0], vmotor[1], other[0], other[1]))
 
-    descending_type_role_counts = {}
-    if "type" in selected.columns:
-        tmp_roles = selected[selected["superclass"].astype(str).eq("descending_neuron")]
-        for role, group in tmp_roles.groupby("descending_role"):
-            names = (
-                group["type"].fillna("").astype(str)
-                .replace("", "<unknown>")
-                .value_counts()
-                .to_dict()
-            )
-            descending_type_role_counts[str(int(role))] = {
-                str(k): int(v) for k, v in names.items()
-            }
-
     selected_route_counts = {
         "forward_nonzero": int((route_forward_selected > 0).sum()),
         "turn_nonzero": int((route_turn_selected > 0).sum()),
@@ -744,10 +688,9 @@ def main(root: Path) -> None:
         "descending_role_counts": {int(k): int(v) for k,v in selected.groupby("descending_role").size().to_dict().items()},
         "motor_role_definition": "derived from curated annotation text for vnc_motor cells; runtime movement is driven only by measured vnc_motor activity",
         "descending_role_definition": "derived from published annotation text; used as descriptive metadata and not as a synthetic current source",
-        "route_score_definition": "two-hop geometric-mean topology scores from published sensor->candidate->DN and DN->candidate->motor paths; forward uses documented walking DNs, turn uses documented steering DNs, and fast-escape uses the visual LC4/LPLC2->DNp01 pathway; scores are used for selection and diagnostic weighting only",
+        "route_score_definition": "two-hop geometric-mean topology scores from published sensor->candidate->DN and DN->candidate->motor paths; used for selection and diagnostic weighting only",
         "route_score_source_counts": source_route_counts,
         "route_score_selected_counts": selected_route_counts,
-        "descending_type_role_counts": descending_type_role_counts,
         "route_quota_requested": route_quota,
         "retained_sensor_to_desc_edges": int(retained_sensor_desc_edges),
         "retained_desc_to_motor_edges": int(retained_desc_motor_edges),
