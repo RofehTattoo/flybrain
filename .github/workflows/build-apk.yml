@@ -29,7 +29,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
 
       - name: Preparar Android SDK
@@ -80,12 +79,16 @@ jobs:
           echo "========================================"
 
 
-      - name: Instalar dependencias del extractor MaleCNS
+      - name: Instalar dependencias Python
         run: |
           set -euo pipefail
 
           python -m pip install --upgrade pip
           python -m pip install numpy pandas pyarrow
+
+          echo "========================================"
+          echo "DEPENDENCIAS PYTHON INSTALADAS"
+          echo "========================================"
 
 
       - name: Generar reducción MaleCNS V0.95
@@ -144,7 +147,7 @@ jobs:
           echo "Version: 0.95"
           echo "VersionCode: 95"
           echo "Neuronas: 16.669"
-          echo "MaleCNS v1.0"
+          echo "MaleCNS"
           echo "Connectome reducido"
           echo "========================================"
 
