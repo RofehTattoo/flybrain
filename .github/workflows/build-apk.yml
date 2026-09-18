@@ -36,8 +36,27 @@ jobs:
 
       - name: Corregir versión Java
         run: |
-          sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' proyecto/app/build.gradle.kts
-          sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' proyecto/app/build.gradle.kts
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("proyecto/app/build.gradle.kts")
+          s = p.read_text()
+
+          s = s.replace("JavaVersion.VERSION_1_8", "JavaVersion.VERSION_17")
+          s = s.replace('jvmTarget = "1.8"', 'jvmTarget = "17"')
+          s = s.replace('JvmTarget.JVM_1_8', 'JvmTarget.JVM_17')
+
+          p.write_text(s)
+
+          print("Configuración Java/Kotlin corregida:")
+          for line in s.splitlines():
+              if "JavaVersion" in line or "jvmTarget" in line or "JvmTarget" in line:
+                  print(line)
+          PY
+
+      - name: Verificar configuración
+        run: |
+          grep -RniE "VERSION_1_8|JVM_1_8|jvmTarget|sourceCompatibility|targetCompatibility" proyecto/app/build.gradle.kts || true
 
       - name: Compilar APK
         working-directory: proyecto
