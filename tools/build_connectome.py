@@ -280,13 +280,12 @@ def main(root: Path) -> None:
     threat_escape = np.sqrt(np.maximum(0.0, (sensor_in[0] + sensor_in[3]) * cell_to_desc[4]))
 
     forward_motor_path = np.sqrt(np.maximum(0.0, desc_to_cell[1] * cell_to_motor[1]))
-    # Turning is not restricted to leg motor neurons. Use all curated VNC
-    # motor-role outputs for the descriptive turn-route score.
+    # Turning/steering can recruit coordinated motor outputs. The route score
+    # therefore considers every curated motor-role channel rather than only legs.
     turn_motor_outputs = cell_to_motor[1:].sum(axis=0)
     turn_motor_path = np.sqrt(
         np.maximum(0.0, desc_to_cell[2] * turn_motor_outputs)
     )
-
     escape_motor_path = np.sqrt(np.maximum(
         0.0,
         desc_to_cell[4] * (cell_to_motor[1] + cell_to_motor[2] + cell_to_motor[6])
@@ -299,6 +298,14 @@ def main(root: Path) -> None:
         0.0,
         sensor_in.sum(axis=0) * cell_to_motor[1:].sum(axis=0)
     ))
+
+    # If the published graph has no turn-route candidate at all, fail here with
+    # a diagnostic instead of producing a misleading zero route in the report.
+    if not np.any(route_turn > 0):
+        raise RuntimeError(
+            "MaleCNS v1.0 contains no positive two-hop turn-route candidate "
+            "under the current published-role annotations"
+        )
 
     def normalize_score(x):
         m = float(np.nanmax(x)) if len(x) else 0.0
@@ -379,8 +386,8 @@ def main(root: Path) -> None:
     route_parts = []
     route_ids = set()
 
-    # Reserve measured positive turn-route cells first. This prevents the turn
-    # family from losing its entire effective quota to earlier route families.
+    # Explicitly protect cells with a positive measured turn route before
+    # allocating the other route-family quotas. No edge is created here.
     positive_turn = intermediate_pool[
         intermediate_pool["route_turn"] > 0
     ].sort_values(
@@ -394,21 +401,18 @@ def main(root: Path) -> None:
             remaining_slots,
             len(positive_turn),
         )
-        turn_part = positive_turn.head(take_turn)
-        route_parts.append(turn_part)
-        route_ids.update(turn_part.bodyId.astype(int).tolist())
-        remaining_slots -= len(turn_part)
+        turn_seed = positive_turn.head(take_turn)
+        route_parts.append(turn_seed)
+        route_ids.update(turn_seed.bodyId.astype(int).tolist())
+        remaining_slots -= len(turn_seed)
 
     for score_col, quota in route_quota.items():
-        if remaining_slots <= 0:
-            break
         if score_col == "route_turn":
             continue
-
+        if remaining_slots <= 0:
+            break
         take = min(quota, remaining_slots)
-        candidates = intermediate_pool[
-            ~intermediate_pool.bodyId.isin(route_ids)
-        ].sort_values(
+        candidates = intermediate_pool[~intermediate_pool.bodyId.isin(route_ids)].sort_values(
             [score_col, "route_score", "degree", "bodyId"],
             ascending=[False, False, False, True],
         )
@@ -488,7 +492,7 @@ def main(root: Path) -> None:
 
     if not np.any(selected["route_turn"].to_numpy(np.float64) > 0):
         raise AssertionError(
-            "selected set contains no non-zero turn-route cell"
+            "selected set contains no non-zero published turn-route cell"
         )
 
     # Stable anatomical ordering: sensory channels first, then descending,
@@ -650,6 +654,12 @@ def main(root: Path) -> None:
         "escape_high": int((route_escape_selected >= 0.25).sum()),
     }
 
+    source_route_counts = {
+        "forward_nonzero": int((route_forward > 0).sum()),
+        "turn_nonzero": int((route_turn > 0).sum()),
+        "escape_nonzero": int((route_escape > 0).sum()),
+    }
+
     report = {
         "dataset": "MaleCNS v1.0",
         "flybrain_version": "1.02",
@@ -675,6 +685,7 @@ def main(root: Path) -> None:
         "motor_role_definition": "derived from curated annotation text for vnc_motor cells; runtime movement is driven only by measured vnc_motor activity",
         "descending_role_definition": "derived from published annotation text; used as descriptive metadata and not as a synthetic current source",
         "route_score_definition": "two-hop geometric-mean topology scores from published sensor->candidate->DN and DN->candidate->motor paths; used for selection and diagnostic weighting only",
+        "route_score_source_counts": source_route_counts,
         "route_score_selected_counts": selected_route_counts,
         "route_quota_requested": route_quota,
         "retained_sensor_to_desc_edges": int(retained_sensor_desc_edges),
