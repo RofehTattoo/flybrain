@@ -276,17 +276,74 @@ jobs:
 
           MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
 
-          grep -Fq 'sensoryTrace' "$MAIN"
+          # --------------------------------------------------------
+          # TRAZA SINAPTICA
+          # --------------------------------------------------------
 
-          grep -Fq 'centralTrace' "$MAIN"
+          grep -Fq 'synTrace' "$MAIN"
 
-          grep -Fq 'descendingTrace' "$MAIN"
+          grep -Fq 'synDecay' "$MAIN"
 
-          grep -Fq 'motorTrace' "$MAIN"
+          grep -Fq 'spike creates a short-lived synaptic trace' "$MAIN"
 
-          grep -Fq 'synapticTrace' "$MAIN"
+
+          # --------------------------------------------------------
+          # ACTIVIDAD SENSORIAL REAL
+          # --------------------------------------------------------
+
+          grep -Fq 'visualRate' "$MAIN"
+
+          grep -Fq 'olfactoryRate' "$MAIN"
+
+          grep -Fq 'gustatoryRate' "$MAIN"
+
+          grep -Fq 'mechanosensoryRate' "$MAIN"
+
+
+          # --------------------------------------------------------
+          # ACTIVIDAD CENTRAL
+          # --------------------------------------------------------
+
+          grep -Fq 'centralRate' "$MAIN"
+
+          grep -Fq 'centralRateDisplay' "$MAIN"
+
+
+          # --------------------------------------------------------
+          # ACTIVIDAD DESCENDENTE
+          # --------------------------------------------------------
+
+          grep -Fq 'descendingRate' "$MAIN"
+
+          grep -Fq 'descendingRateDisplay' "$MAIN"
+
+
+          # --------------------------------------------------------
+          # ACTIVIDAD ASCENDENTE
+          # --------------------------------------------------------
+
+          grep -Fq 'ascendingRate' "$MAIN"
+
+          grep -Fq 'ascendingRateDisplay' "$MAIN"
+
+
+          # --------------------------------------------------------
+          # ACTIVIDAD MOTOR / VNC
+          # --------------------------------------------------------
+
+          grep -Fq 'motorRate' "$MAIN"
+
+          grep -Fq 'motorRateDisplay' "$MAIN"
+
+
+          # --------------------------------------------------------
+          # LOCOMOCIÓN REAL
+          # --------------------------------------------------------
 
           grep -Fq 'stableLocomotion' "$MAIN"
+
+          grep -Fq 'motorLocomotion' "$MAIN"
+
 
           echo "DIAGNOSTICO NEURAL V0.99 CORRECTO"
 
@@ -314,15 +371,72 @@ jobs:
           test -f "proyecto/app/src/main/res/raw/malecns_reduced.bin"
           test -f "$REPORT"
 
+          # --------------------------------------------------------
+          # VERSION
+          # --------------------------------------------------------
+
           grep -Fq 'versionCode = 99' "$APP_GRADLE"
 
           grep -Fq 'versionName = "0.99"' "$APP_GRADLE"
 
           grep -Fq 'FLYBRAIN V0.99' "$MAIN"
 
+          # --------------------------------------------------------
+          # NEURONAS
+          # --------------------------------------------------------
+
           grep -Fq 'NEURONS = 16669' "$META"
 
+          grep -Fq '"neurons_retained": 16669' "$REPORT"
+
+          # --------------------------------------------------------
+          # FORMATO BINARIO
+          # --------------------------------------------------------
+
           grep -Fq 'FBC99' "$MAIN"
+
+          # --------------------------------------------------------
+          # ESTADO LOCOMOTOR
+          # --------------------------------------------------------
+
+          grep -Fq 'locomotorDrive' "$MAIN"
+
+          grep -Fq 'locomotorPhase' "$MAIN"
+
+          grep -Fq 'motorActivityMemory' "$MAIN"
+
+          # --------------------------------------------------------
+          # ROLES DESCENDENTES
+          # --------------------------------------------------------
+
+          grep -Fq 'descendingRole' "$MAIN"
+
+          # --------------------------------------------------------
+          # TRAZA SINAPTICA
+          # --------------------------------------------------------
+
+          grep -Fq 'synTrace' "$MAIN"
+
+          # --------------------------------------------------------
+          # DIAGNOSTICO SENSORIAL
+          # --------------------------------------------------------
+
+          grep -Fq 'visualRateDisplay' "$MAIN"
+
+          grep -Fq 'olfactoryRateDisplay' "$MAIN"
+
+          grep -Fq 'gustatoryRateDisplay' "$MAIN"
+
+          grep -Fq 'mechanosensoryRateDisplay' "$MAIN"
+
+          # --------------------------------------------------------
+          # DIAGNOSTICO MOTOR
+          # --------------------------------------------------------
+
+          grep -Fq 'motorRateDisplay' "$MAIN"
+
+          grep -Fq 'stableLocomotion' "$MAIN"
+
 
           echo "========================================"
           echo "PROYECTO V0.99 VALIDADO"
@@ -377,6 +491,7 @@ jobs:
           APK="proyecto/app/build/outputs/apk/debug/app-debug.apk"
 
           test -f "$APK"
+
           test -s "$APK"
 
           echo "APK ENCONTRADO:"
