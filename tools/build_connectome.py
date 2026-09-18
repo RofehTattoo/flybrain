@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.03.
+"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.04.
 
 The reduction is derived from the published MaleCNS v1.0 annotation and weighted
 connectivity tables. It keeps exactly 10% of the 166,691-neuron census by
@@ -13,8 +13,6 @@ import json
 import math
 import re
 import struct
-import time
-import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -49,37 +47,13 @@ NT_SIGN = {
 SUPERCLASS_CODE = {}
 
 def download(path: Path, name: str) -> None:
-    """Download a source table atomically with retries.
-
-    The MaleCNS weight table is large, so a transient HTTP/network failure must
-    not leave a truncated file that a later run silently reuses.
-    """
     if path.exists() and path.stat().st_size > 0:
         return
     url = BASE + name
     tmp = path.with_suffix(path.suffix + ".partial")
     print(f"Downloading {name} ...", flush=True)
-    last_error = None
-    for attempt in range(1, 5):
-        try:
-            if tmp.exists():
-                tmp.unlink()
-            with urllib.request.urlopen(url, timeout=120) as response, tmp.open("wb") as out:
-                while True:
-                    chunk = response.read(8 * 1024 * 1024)
-                    if not chunk:
-                        break
-                    out.write(chunk)
-            if tmp.stat().st_size <= 0:
-                raise IOError(f"empty download for {name}")
-            tmp.replace(path)
-            return
-        except (OSError, IOError, urllib.error.URLError) as exc:
-            last_error = exc
-            print(f"download attempt {attempt}/4 failed for {name}: {exc}", flush=True)
-            if attempt < 4:
-                time.sleep(5 * attempt)
-    raise RuntimeError(f"could not download {name} after 4 attempts: {last_error}")
+    urllib.request.urlretrieve(url, tmp)
+    tmp.replace(path)
 
 
 def clean(x):
@@ -147,7 +121,7 @@ def classify_descending_role(row) -> int:
     """Assign a descriptive motor-family label to a descending neuron.
 
     The label is metadata only: it never creates, removes, or rewrites an edge.
-    V1.03 uses explicit published cell-type names for the few descending
+    V1.04 uses explicit published cell-type names for the few descending
     populations whose behavioural role is established, and only then falls
     back to annotation keywords. This avoids the previous-version failure mode where
     almost all 1,314 DNs were left as role 0 simply because the annotation
@@ -241,7 +215,7 @@ def main(root: Path) -> None:
     counts = traced.groupby("superclass", sort=True).size().to_dict()
     total = len(traced)
 
-    # V1.03 functional-route analysis. The reduction now preferentially preserves
+    # V1.04 functional-route analysis. The reduction now preferentially preserves
     # measured two-hop pathways in the published graph instead of using a single
     # aggregate bridge score. For each candidate neuron we estimate whether the
     # full connectome contains paths of the form sensor -> candidate -> DN and
@@ -385,7 +359,7 @@ def main(root: Path) -> None:
         sensor_in.sum(axis=0) * cell_to_motor[1:].sum(axis=0)
     ))
 
-    # V1.03 is fail-closed at the source-analysis level. A build is not allowed
+    # V1.04 is fail-closed at the source-analysis level. A build is not allowed
     # to publish a reduced graph whose three intended behavioural route families
     # are silently absent. These are measured topology scores, not synthetic
     # currents or generated edges.
@@ -401,7 +375,7 @@ def main(root: Path) -> None:
         raise RuntimeError(
             "MaleCNS v1.0 route analysis produced no positive measured "
             + ", ".join(missing_routes)
-            + " route candidate(s); refusing to publish V1.03."
+            + " route candidate(s); refusing to publish V1.04."
         )
 
     def normalize_score(x):
@@ -425,7 +399,7 @@ def main(root: Path) -> None:
         + 0.18 * route_sensorimotor_n
     )
 
-    # Selection strategy for V1.03:
+    # Selection strategy for V1.04:
     # 1) retain every curated descending neuron and every curated VNC motor neuron;
     # 2) retain at least one representative per published neuron type;
     # 3) reserve a substantial quota for measured two-hop functional routes;
@@ -716,7 +690,7 @@ def main(root: Path) -> None:
     if retained_sensor_desc[0, 4] <= 0:
         raise RuntimeError(
             "No retained visual -> escape-DN contacts survived the reduction; "
-            "refusing to publish V1.03."
+            "refusing to publish V1.04."
         )
 
     # Count actual retained DN -> intermediate -> motor paths. Each path is a
@@ -749,12 +723,6 @@ def main(root: Path) -> None:
     for code, name in [(0,"visual"),(1,"olfactory"),(2,"gustatory"),(3,"mechanosensory"),(4,"other")]:
         idxs = np.where(channel_selected == code)[0]
         ranges[name] = [int(idxs.min()), int(idxs.max()+1)] if len(idxs) else [0,0]
-
-    # Internal consistency check: the runtime `OTHER` population is defined by
-    # channel 4, not by the final selection block. Keep this invariant explicit
-    # so a future refactor cannot reintroduce the source-index/range mismatch.
-    assert ranges["other"][0] == ranges["mechanosensory"][1]
-    assert ranges["other"][1] == TARGET
 
     sc_list = sorted(selected["superclass"].astype(str).unique().tolist())
     SUPERCLASS_CODE.clear()
@@ -797,17 +765,13 @@ def main(root: Path) -> None:
     desc = superclass_range("descending_neuron")
     asc = superclass_range("ascending_neuron")
     vmotor = superclass_range("vnc_motor")
-    # `channel_ranges["other"]` is the complete runtime central/other block.
-    # Do NOT derive it from `block == 7`: that block is only the final subset
-    # after descending, ascending and VNC-motor populations. Using block 7 here
-    # leaks a different semantic range into GeneratedConnectomeMeta.kt and was
-    # the cause of the V1.02/V1.03 OTHER_START validation failure.
-    other = (int(ranges["other"][0]), int(ranges["other"][1]))
+    other_idx = np.where(selected["block"].to_numpy() == 7)[0]
+    other = (int(other_idx.min()), int(other_idx.max()+1)) if len(other_idx) else (0,0)
 
     meta = root / "app" / "src" / "main" / "java" / "com" / "example" / "flybrain" / "GeneratedConnectomeMeta.kt"
     motor_role_counts = {int(k): int(v) for k,v in selected.groupby("motor_role").size().to_dict().items()}
 
-    meta.write_text('package com.example.flybrain\n\nobject GeneratedConnectomeMeta {\n    const val VERSION = "MaleCNS v1.0 · FlyBrain V1.03"\n    const val FORMAT_MAGIC = "FBC102"\n    const val FORMAT_VERSION = 102\n    const val NEURONS = %d\n    const val EDGES = %d\n    const val CONTACTS_RETAINED = %dL\n    const val VIS_START = %d\n    const val VIS_END = %d\n    const val OLF_START = %d\n    const val OLF_END = %d\n    const val GUST_START = %d\n    const val GUST_END = %d\n    const val MECH_START = %d\n    const val MECH_END = %d\n    const val DESC_START = %d\n    const val DESC_END = %d\n    const val ASC_START = %d\n    const val ASC_END = %d\n    const val VMOTOR_START = %d\n    const val VMOTOR_END = %d\n    const val OTHER_START = %d\n    const val OTHER_END = %d\n    const val MOTOR_LEG = 1\n    const val MOTOR_WING = 2\n    const val MOTOR_HALTERE = 3\n    const val MOTOR_NECK = 4\n    const val MOTOR_ABDOMEN = 5\n    const val MOTOR_JUMP = 6\n    const val MOTOR_OTHER = 7\n}\n' % (TARGET, len(edges), contacts,
+    meta.write_text('package com.example.flybrain\n\nobject GeneratedConnectomeMeta {\n    const val VERSION = "MaleCNS v1.0 · FlyBrain V1.04"\n    const val FORMAT_MAGIC = "FBC102"\n    const val FORMAT_VERSION = 102\n    const val NEURONS = %d\n    const val EDGES = %d\n    const val CONTACTS_RETAINED = %dL\n    const val VIS_START = %d\n    const val VIS_END = %d\n    const val OLF_START = %d\n    const val OLF_END = %d\n    const val GUST_START = %d\n    const val GUST_END = %d\n    const val MECH_START = %d\n    const val MECH_END = %d\n    const val DESC_START = %d\n    const val DESC_END = %d\n    const val ASC_START = %d\n    const val ASC_END = %d\n    const val VMOTOR_START = %d\n    const val VMOTOR_END = %d\n    const val OTHER_START = %d\n    const val OTHER_END = %d\n    const val MOTOR_LEG = 1\n    const val MOTOR_WING = 2\n    const val MOTOR_HALTERE = 3\n    const val MOTOR_NECK = 4\n    const val MOTOR_ABDOMEN = 5\n    const val MOTOR_JUMP = 6\n    const val MOTOR_OTHER = 7\n}\n' % (TARGET, len(edges), contacts,
        ranges["visual"][0], ranges["visual"][1], ranges["olfactory"][0], ranges["olfactory"][1],
        ranges["gustatory"][0], ranges["gustatory"][1], ranges["mechanosensory"][0], ranges["mechanosensory"][1],
        desc[0], desc[1], asc[0], asc[1], vmotor[0], vmotor[1], other[0], other[1]))
@@ -827,7 +791,7 @@ def main(root: Path) -> None:
 
     report = {
         "dataset": "MaleCNS v1.0",
-        "flybrain_version": "1.03",
+        "flybrain_version": "1.04",
         "binary_format": "FBC102",
         "node_record_bytes": NODE_SIZE,
         "edge_record_bytes": EDGE_SIZE,

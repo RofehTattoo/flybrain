@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent structural validation for FlyBrain V1.03 generated data."""
+"""Independent structural validation for FlyBrain V1.04 generated data."""
 from __future__ import annotations
 
 import json
@@ -9,7 +9,7 @@ import struct
 from pathlib import Path
 
 TARGET = 16669
-MAGIC = b"FBC102\x00\x00"  # Binary format remains FBC102; app release is V1.03.
+MAGIC = b"FBC102\x00\x00"  # Binary format remains FBC102; app release is V1.04.
 NODE_SIZE = 25
 EDGE_SIZE = 12
 HEADER_SIZE = 16
@@ -39,7 +39,7 @@ def main(root: Path) -> None:
     main_text = main_path.read_text()
 
     assert report["dataset"] == "MaleCNS v1.0"
-    assert report["flybrain_version"] == "1.03"
+    assert report["flybrain_version"] == "1.04"
     assert report["binary_format"] == "FBC102"
     assert report["node_record_bytes"] == NODE_SIZE
     assert report["edge_record_bytes"] == EDGE_SIZE
@@ -97,10 +97,7 @@ def main(root: Path) -> None:
         "OTHER_START": ranges["other"][0], "OTHER_END": ranges["other"][1],
     }
     for name, value in meta_expected.items():
-        actual = parse_meta_int(meta, name)
-        assert actual == int(value), (
-            f"metadata mismatch {name}: generated={actual}, report={int(value)}"
-        )
+        assert parse_meta_int(meta, name) == int(value), (name, value)
 
     assert parse_meta_int(meta, "NEURONS") == TARGET
     assert parse_meta_int(meta, "FORMAT_VERSION") == 102
@@ -185,7 +182,7 @@ def main(root: Path) -> None:
     assert "buildFallbackBrain" not in main_text
     assert "plasticityEnabled = false" in main_text
 
-    print("FBC102 independent validation for FlyBrain V1.03: OK")
+    print("FBC102 independent validation for FlyBrain V1.04: OK")
     print(f"neurons={n}")
     print(f"edges={e}")
     print(f"bytes={len(data)}")

@@ -1,8 +1,8 @@
 package com.example.flybrain
 
-/** Placeholder overwritten by tools/build_connectome.py during the V1.03 build. */
+/** Placeholder overwritten by tools/build_connectome.py during the V1.04 build. */
 object GeneratedConnectomeMeta {
-    const val VERSION = "MaleCNS v1.0 · FlyBrain V1.03"
+    const val VERSION = "MaleCNS v1.0 · FlyBrain V1.04"
     const val FORMAT_MAGIC = "FBC102"
     const val FORMAT_VERSION = 102
     const val NEURONS = 16669

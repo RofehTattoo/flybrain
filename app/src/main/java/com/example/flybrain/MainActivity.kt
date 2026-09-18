@@ -8,6 +8,8 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioAttributes
+import android.media.SoundPool
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
@@ -91,7 +93,7 @@ class MainActivity : Activity() {
         }
         root.addView(
             info,
-            LinearLayout.LayoutParams(-1, 150.dp()).apply {
+            LinearLayout.LayoutParams(-1, 96.dp()).apply {
                 setMargins(8.dp(), 5.dp(), 8.dp(), 5.dp())
             }
         )
@@ -123,7 +125,7 @@ class MainActivity : Activity() {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val rng = Random(9301)
 
-        // V1.03: exactly 16,669 simulated neurons. The graph is generated at
+        // V1.04: exactly 16,669 simulated neurons. The graph is generated at
         // build time from the public MaleCNS v1.0 tables: neurons are sampled
         // within the published superclasses and retained edges are real
         // body-to-body connections from the source connectome.
@@ -160,7 +162,7 @@ class MainActivity : Activity() {
         private val routeTurn = FloatArray(N)
         private val routeEscape = FloatArray(N)
         private val refractory = FloatArray(N)
-        // V1.03: short-lived chemical synaptic trace (~45 ms).
+        // V1.04: short-lived chemical synaptic trace (~45 ms).
         private val synTrace = FloatArray(N)
 
         private val incoming = Array(N) { IntArray(0) }
@@ -229,7 +231,7 @@ class MainActivity : Activity() {
         private var brakeMotor = 0f
         private var exploreMotor = 0f
 
-        // V1.03: action-selection populations. These are readouts of measured
+        // V1.04: action-selection populations. These are readouts of measured
         // descending/VNC activity, not direct stimulus-to-body commands.
         private var approachAction = 0f
         private var exploreAction = 0f
@@ -242,6 +244,23 @@ class MainActivity : Activity() {
         private var turnRouteActivityDisplay = 0f
         private var escapeRouteActivityDisplay = 0f
 
+        // V1.04 presentation: a small set of actual retained neurons is projected
+        // onto a 2D anatomical schematic. Links shown in the panel are real edges
+        // between those representative neurons, never invented visual topology.
+        private val brainDisplayIds = ArrayList<Int>(240)
+        private val brainDisplayLookup = IntArray(N) { -1 }
+        private val brainDisplayLinks = ArrayList<Pair<Int, Int>>(180)
+
+        // Visual wing-beat and sound are presentation layers only. They do not
+        // feed back into the neural state or body mechanics.
+        private var wingActivityCache = 0f
+        private var wingBeatPhase = 0f
+        private var soundPool: SoundPool? = null
+        private var buzzSoundId = 0
+        private var buzzStreamId = 0
+        private var buzzLoaded = false
+        private var soundReleased = false
+
         private var foodDrive = 0f
         private var lightDrive = 0f
         private var dangerDrive = 0f
@@ -250,7 +269,7 @@ class MainActivity : Activity() {
         private var dangerDirectionalBias = 0f
         private var dangerLoom = 0f
 
-        // V1.03: endogenous locomotor state. This is deliberately not a
+        // V1.04: endogenous locomotor state. This is deliberately not a
         // stimulus-to-movement rule. It is a weak, seeded stochastic current
         // applied to non-motor central/VNC neurons, allowing the retained
         // recurrent network to enter and leave exploratory states.
@@ -269,20 +288,13 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(250, 250, 250))
             explorationState = .45f
             buildBrain()
+            setupBuzzSound()
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.03 · DIAGNÓSTICO\n")
-            append("16.669 neuronas · MaleCNS v1.0 reducido · sin atajo estímulo→cuerpo\n")
-            append(if (connectomeLoaded) "CONNECTOME: OK · ${loadedEdgeCount} conexiones retenidas\n" else "CONNECTOME: ERROR · $connectomeError\n")
-            append("SENS V/O/G/M: ${(visualRateDisplay*100).toInt()} / ${(olfactoryRateDisplay*100).toInt()} / ${(gustatoryRateDisplay*100).toInt()} / ${(mechanosensoryRateDisplay*100).toInt()}%\n")
-            append("CENTRAL ${(centralRateDisplay*100).toInt()}% · DN ${(descendingRateDisplay*100).toInt()}% · ASC ${(ascendingRateDisplay*100).toInt()}% · MOTOR ${(motorRateDisplay*100).toInt()}%\n")
-            append("Comida ${if (foodOn) "ON" else "OFF"} · Luz ${if (lightOn) "ON" else "OFF"} · Peligro ${if (dangerOn) "ON" else "OFF"}\n")
-            append("Comidas $foodHits · Escapes $escapeEvents · Saciedad ${(satiety * 100).toInt()}% · Traza ${(memoryTrace * 100).toInt()}% · FPS ${fps.toInt()}\n")
-            append("NEURAL 50Hz · pasos/frame $neuralStepsLastFrame · backlog ${neuralBacklogSeconds.toInt()}ms\n")
-            append("ACCIÓN A ${(approachAction * 100).toInt()} · E ${(escapeAction * 100).toInt()} · O ${(orientAction * 100).toInt()} · X ${(exploreAction * 100).toInt()} · B ${(brakeAction * 100).toInt()}\n")
-            append("RUTAS F ${(forwardRouteActivityDisplay * 100).toInt()} · T ${(turnRouteActivityDisplay * 100).toInt()} · ESC ${(escapeRouteActivityDisplay * 100).toInt()} · Loom ${(dangerLoom * 100).toInt()}%\n")
-            append("Conducta: ${behaviorLabel()} · Locomoción ${(stableLocomotion * 100).toInt()}%")
+            append("FLYBRAIN V1.04\n")
+            append("16.669 neuronas · MaleCNS v1.0\n")
+            append("Comidas $foodHits · Escapes $escapeEvents · Saciedad ${(satiety * 100).toInt()}% · Memoria ${(memoryTrace * 100).toInt()}% · FPS ${fps.toInt()}")
         }
 
         private fun behaviorLabel(): String {
@@ -426,6 +438,12 @@ class MainActivity : Activity() {
             previousDangerDrive = 0f
             baselineTurnBias = 0f
             legActivityCache = 0f
+            wingActivityCache = 0f
+            wingBeatPhase = 0f
+            if (buzzStreamId != 0) {
+                soundPool?.stop(buzzStreamId)
+                buzzStreamId = 0
+            }
             lastNs = System.nanoTime()
             info.text = infoText()
             invalidate()
@@ -524,13 +542,8 @@ class MainActivity : Activity() {
                         throw IllegalStateException("metadata de ruta invalida en nodo $it")
                     }
                 }
-                // Build exact-size incoming arrays in two passes. The previous
-                // implementation accumulated ~2 million boxed Int/Float values
-                // in MutableLists, creating a large transient heap spike during
-                // APK startup. We only need the final primitive arrays.
-                val incomingCounts = IntArray(n)
-                val edgeStart = b.position()
-                var previousKey = -1L
+                val l = Array(n) { mutableListOf<Int>() }
+                val ws = Array(n) { mutableListOf<Float>() }
                 repeat(e) {
                     val src = b.int
                     val dst = b.int
@@ -541,34 +554,17 @@ class MainActivity : Activity() {
                     if (!weight.isFinite() || weight == 0f) {
                         throw IllegalStateException("edge[$it] con peso invalido")
                     }
-                    val key = (dst.toLong() shl 32) or (src.toLong() and 0xffffffffL)
-                    if (key < previousKey) {
-                        throw IllegalStateException("edges fuera de orden en registro $it")
-                    }
-                    previousKey = key
-                    incomingCounts[dst]++
+                    l[dst].add(src)
+                    ws[dst].add(weight)
                 }
-
-                for (i in 0 until n) {
-                    incoming[i] = IntArray(incomingCounts[i])
-                    incomingW[i] = FloatArray(incomingCounts[i])
-                    baseW[i] = FloatArray(incomingCounts[i])
-                    eligibility[i] = FloatArray(incomingCounts[i])
-                }
-
-                b.position(edgeStart)
-                val writeAt = IntArray(n)
-                repeat(e) {
-                    val src = b.int
-                    val dst = b.int
-                    val weight = b.float
-                    val k = writeAt[dst]++
-                    incoming[dst][k] = src
-                    incomingW[dst][k] = weight
-                    baseW[dst][k] = weight
-                }
-
                 if (b.hasRemaining()) throw IllegalStateException("bytes restantes=${b.remaining()}")
+                for (i in 0 until N) {
+                    incoming[i] = l[i].toIntArray()
+                    incomingW[i] = ws[i].toFloatArray()
+                    baseW[i] = incomingW[i].clone()
+                    eligibility[i] = FloatArray(incomingW[i].size)
+                }
+                buildBrainDisplayGraph()
                 loadedEdgeCount = e
                 connectomeError = ""
                 true
@@ -577,6 +573,104 @@ class MainActivity : Activity() {
                 loadedEdgeCount = 0
                 false
             }
+        }
+
+        private fun buildBrainDisplayGraph() {
+            brainDisplayIds.clear()
+            java.util.Arrays.fill(brainDisplayLookup, -1)
+            brainDisplayLinks.clear()
+
+            fun addPopulation(start: Int, end: Int, count: Int) {
+                val size = end - start
+                if (size <= 0 || count <= 0) return
+                val take = min(count, size)
+                for (j in 0 until take) {
+                    val idx = if (take == 1) start else
+                        start + ((j.toLong() * (size - 1).toLong()) / (take - 1).toLong()).toInt()
+                    if (brainDisplayLookup[idx] < 0) {
+                        brainDisplayLookup[idx] = brainDisplayIds.size
+                        brainDisplayIds.add(idx)
+                    }
+                }
+            }
+
+            addPopulation(VIS_START, VIS_END, 42)
+            addPopulation(OLF_START, OLF_END, 22)
+            addPopulation(GUST_START, GUST_END, 14)
+            addPopulation(MECH_START, MECH_END, 14)
+            addPopulation(OTHER_START, OTHER_END, 78)
+            addPopulation(DESC_START, DESC_END, 24)
+            addPopulation(ASC_START, ASC_END, 14)
+            addPopulation(MOTOR_START, MOTOR_END, 32)
+
+            for (targetRep in brainDisplayIds.indices) {
+                val target = brainDisplayIds[targetRep]
+                var added = 0
+                for (source in incoming[target]) {
+                    val sourceRep = brainDisplayLookup[source]
+                    if (sourceRep >= 0 && sourceRep != targetRep) {
+                        brainDisplayLinks.add(Pair(sourceRep, targetRep))
+                        added++
+                        if (added >= 3) break
+                    }
+                }
+            }
+        }
+
+        private fun setupBuzzSound() {
+            val attributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_GAME)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            soundPool = SoundPool.Builder()
+                .setAudioAttributes(attributes)
+                .setMaxStreams(1)
+                .build()
+                .also { pool ->
+                    pool.setOnLoadCompleteListener { _, sampleId, status ->
+                        if (sampleId == buzzSoundId) buzzLoaded = status == 0
+                    }
+                    buzzSoundId = pool.load(resources, R.raw.fly_buzz, 1)
+                }
+        }
+
+        private fun updateBuzzSound() {
+            if (soundReleased || !buzzLoaded || buzzSoundId == 0) return
+            val movement = (abs(flySpeed) / .010f).coerceIn(0f, 1f)
+            val interaction = max(foodDrive, max(lightDrive, dangerDrive)).coerceIn(0f, 1f)
+            val active = movement > .035f || interaction > .16f
+            if (!active) {
+                if (buzzStreamId != 0) {
+                    soundPool?.stop(buzzStreamId)
+                    buzzStreamId = 0
+                }
+                return
+            }
+            val volume = (0.035f + movement * .16f + interaction * .045f).coerceIn(.035f, .24f)
+            if (buzzStreamId == 0) {
+                buzzStreamId = soundPool?.play(buzzSoundId, volume, volume, 1, -1, 1.0f) ?: 0
+            } else {
+                soundPool?.setVolume(buzzStreamId, volume, volume)
+            }
+        }
+
+        override fun onWindowVisibilityChanged(visibility: Int) {
+            super.onWindowVisibilityChanged(visibility)
+            if (visibility != View.VISIBLE && buzzStreamId != 0) {
+                soundPool?.stop(buzzStreamId)
+                buzzStreamId = 0
+            }
+        }
+
+        override fun onDetachedFromWindow() {
+            if (buzzStreamId != 0) {
+                soundPool?.stop(buzzStreamId)
+                buzzStreamId = 0
+            }
+            soundPool?.release()
+            soundPool = null
+            soundReleased = true
+            super.onDetachedFromWindow()
         }
 
         private fun gaussian(d: Float, radius: Float): Float {
@@ -703,14 +797,14 @@ class MainActivity : Activity() {
         private fun stepBrain(dt: Float) {
             for (i in 0 until N) prevFired[i] = fired[i]
 
-            // V1.03: a spike creates a short-lived synaptic trace. The temporal
+            // V1.04: a spike creates a short-lived synaptic trace. The temporal
             // trace is applied to the published retained graph; it does not alter topology.
             val synDecay = exp((-dt / .045f).toDouble()).toFloat()
             for (i in 0 until N) {
                 synTrace[i] = (synTrace[i] * synDecay + if (prevFired[i]) 1f else 0f).coerceAtMost(3f)
             }
 
-            // V1.03: internal locomotor state. This is a modulatory input to
+            // V1.04: internal locomotor state. This is a modulatory input to
             // central/descending neurons, not a body-level movement command.
             // The body can move only if measured VNC motor neurons actually fire.
             explorationPhase += dt * (1.35f + explorationState * .55f)
@@ -755,9 +849,9 @@ class MainActivity : Activity() {
                 for (k in src.indices) {
                     syn += w[k] * synTrace[src[k]]
                 }
-                // Do not clip the raw summed synaptic drive before gain. V1.03
+                // Do not clip the raw summed synaptic drive before gain. V1.04
                 // was saturating at +/-0.38 and suppressing long multi-hop paths.
-                // V1.03 applies a single physiologically-inspired current ceiling
+                // V1.04 applies a single physiologically-inspired current ceiling
                 // after population-specific gain.
                 syn = syn.coerceIn(-.75f, .75f)
 
@@ -832,7 +926,7 @@ class MainActivity : Activity() {
             return if (total == 0) 0f else firedCount.toFloat() / total.toFloat()
         }
 
-        // V1.03: competitive action readout. Each action requires measured
+        // V1.04: competitive action readout. Each action requires measured
         // neural evidence first; sensory context only gates that evidence.
         // This keeps the causal direction: sensory input -> connectome activity
         // -> action population -> measured VNC motor output.
@@ -1002,12 +1096,13 @@ class MainActivity : Activity() {
             neckActivity = if (nNeck == 0) 0f else neckActivity / nNeck
             jumpActivity = if (nJump == 0) 0f else jumpActivity / nJump
             abdomenActivity = if (nAbd == 0) 0f else abdomenActivity / nAbd
+            wingActivityCache = wingActivity
 
             // Body mechanics are deliberately simple, but every locomotor command
             // originates from measured VNC motor activity. Left/right asymmetry in
             // leg and neck output changes heading; leg output supplies walking force.
             val rawTurn = ((rightLeg - leftLeg) + (neckActivity * 0.22f)) * 1.55f
-            // V1.03: remove only a slowly learned idle bilateral bias. This is
+            // V1.04: remove only a slowly learned idle bilateral bias. This is
             // proprioceptive/homeostatic normalization, not a stimulus-to-turn
             // rule. Once an external sensory state is present, the raw neural
             // asymmetry is allowed to steer normally.
@@ -1023,7 +1118,7 @@ class MainActivity : Activity() {
             // produce a small measurable body force, while the source remains
             // exclusively the measured VNC motor population.
             val recruitedLeg = sqrt(legActivity.coerceAtLeast(0f))
-            // V1.03: speed remains an output of measured motor neurons. The
+            // V1.04: speed remains an output of measured motor neurons. The
             // nonlinear recruitment is softened so low firing does not become
             // almost-maximal locomotion in the UI/body.
             val cmdSpeed = (recruitedLeg * .008f + jumpImpulse).coerceIn(-.002f, .012f)
@@ -1081,7 +1176,7 @@ class MainActivity : Activity() {
             centralDisplay = .88f * centralDisplay + .12f * ((centralRate + descendingRate + ascendingRate) / 3f)
             motorDisplay = .88f * motorDisplay + .12f * motorRate
 
-            // Update measured motor traces BEFORE action selection. V1.03 read the
+            // Update measured motor traces BEFORE action selection. V1.04 read the
             // previous tick's motor traces, adding avoidable one-step lag.
             leftMotor = .82f * leftMotor + .18f * leftLeg
             rightMotor = .82f * rightMotor + .18f * rightLeg
@@ -1097,7 +1192,7 @@ class MainActivity : Activity() {
             updateActionSelection(dt, visualRate, olfactoryRate, gustatoryRate, mechanosensoryRate, motorRate)
 
             // Escape events are counted only after the current neural action score
-            // has been updated, avoiding the one-tick lag present in V1.03.
+            // has been updated, avoiding the one-tick lag present in V1.04.
             val escapeNeural = escapeAction > .16f &&
                 (descendingRateDisplay > .01f || escapeRouteActivityDisplay > .01f || motorRateDisplay > .01f)
             if (danger > .68f && lastDangerLevel <= .68f && escapeNeural) escapeEvents++
@@ -1108,6 +1203,9 @@ class MainActivity : Activity() {
 
             val motorLocomotion = (motorRate * 2.4f + legActivity * .35f + neckActivity * .08f + jumpActivity * .04f).coerceIn(0f, 1f)
             stableLocomotion = (.88f * stableLocomotion + .12f * motorLocomotion).coerceIn(0f, 1f)
+            val wingVisualIntensity = max(wingActivityCache, (abs(flySpeed) / .010f).coerceIn(0f, 1f))
+            wingBeatPhase += dt * (8f + 11f * wingVisualIntensity) * (Math.PI.toFloat() * 2f)
+            updateBuzzSound()
             info.text = infoText()
         }
 
@@ -1197,38 +1295,29 @@ class MainActivity : Activity() {
         private fun drawBrainPanel(c: Canvas) {
             val ph = brainPanelHeight()
             val top = height - ph
-            paint.color = Color.rgb(20, 25, 28)
             paint.style = Paint.Style.FILL
-            c.drawRoundRect(8f, top, width - 8f, height.toFloat(), 12f, 12f, paint)
+            paint.color = Color.rgb(20, 25, 28)
+            c.drawRoundRect(8f, top, width - 8f, height.toFloat(), 14f, 14f, paint)
+
+            paint.color = Color.WHITE
             paint.textAlign = Paint.Align.LEFT
             paint.typeface = Typeface.DEFAULT_BOLD
-            paint.color = Color.WHITE
-            paint.textSize = 16f
-            c.drawText(if (connectomeLoaded) "CEREBRO · MaleCNS REDUCIDO · ACTIVIDAD V1.03" else "CEREBRO · CONNECTOME NO CARGADO", 20f, top + 23f, paint)
-            bar(c, "SENSORIAL", sensoryDisplay, top + 30f, Color.rgb(52, 195, 110))
-            bar(c, "INTEGRACIÓN", centralDisplay, top + 55f, Color.rgb(80, 145, 225))
-            bar(c, "DESCENDENTES", descendingRateDisplay, top + 80f, Color.rgb(160, 110, 225))
-            bar(c, "MOTOR / VNC", motorDisplay, top + 105f, Color.rgb(225, 160, 45))
-            paint.color = Color.rgb(215, 220, 222)
-            paint.textSize = 8f
-            paint.typeface = Typeface.DEFAULT_BOLD
-            c.drawText("FIRING RATE SENSORIAL REAL · V / O / G / M", 20f, top + 128f, paint)
-            mini(c, "V ${(visualRateDisplay*100).toInt()}%", visualRateDisplay, 20f, top + 134f, 0)
-            mini(c, "O ${(olfactoryRateDisplay*100).toInt()}%", olfactoryRateDisplay, 130f, top + 134f, 1)
-            mini(c, "G ${(gustatoryRateDisplay*100).toInt()}%", gustatoryRateDisplay, 240f, top + 134f, 2)
-            mini(c, "M ${(mechanosensoryRateDisplay*100).toInt()}%", mechanosensoryRateDisplay, 350f, top + 134f, 1)
-            paint.color = Color.rgb(190, 195, 198)
-            paint.textSize = 8f
-            c.drawText("ASC ${(ascendingRateDisplay*100).toInt()}% · INT ${(centralRateDisplay*100).toInt()}% · DN ${(descendingRateDisplay*100).toInt()}%", 20f, top + 163f, paint)
+            paint.textSize = 13f
+            c.drawText("ACTIVIDAD NEURAL · 16.669 NEURONAS", 20f, top + 21f, paint)
 
-            val mapTop = top + 174f
-            val mapBottom = height - 24f
-            drawBrainMap(c, 14f, mapTop, width - 28f, max(110f, mapBottom - mapTop))
-            paint.color = Color.rgb(205, 210, 212)
-            paint.textSize = 8f
+            val mapTop = top + 30f
+            val mapBottom = height - 25f
+            drawBrainMap(c, 14f, mapTop, width - 28f, max(100f, mapBottom - mapTop))
+
+            paint.color = Color.rgb(185, 192, 196)
+            paint.textSize = 7.5f
             paint.typeface = Typeface.DEFAULT
-            c.drawText("MaleCNS v1.0 · 16.669 neuronas · conectividad publicada reducida · rutas 2-hop · V1.03", 20f, height - 7f, paint)
+            c.drawText(
+                "MaleCNS v1.0 · conectividad publicada reducida",
+                20f, height - 8f, paint
+            )
         }
+
 
         private fun bar(c: Canvas, label: String, value: Float, y: Float, accent: Int) {
             paint.typeface = Typeface.DEFAULT_BOLD
@@ -1263,111 +1352,133 @@ class MainActivity : Activity() {
         }
 
         private fun drawBrainMap(c: Canvas, x: Float, y: Float, w: Float, h: Float) {
-            paint.color = Color.rgb(28, 33, 37)
             paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(27, 32, 36)
             c.drawRoundRect(x, y, x + w, y + h, 14f, 14f, paint)
 
-            val cx = x + w * .5f
-            val cy = y + h * .52f
-            val left = x + w * .22f
-            val right = x + w * .78f
+            val cx = x + w * .50f
+            val cy = y + h * .43f
 
-            paint.color = Color.rgb(55, 62, 68)
-            c.drawOval(left - w * .15f, cy - h * .30f, left + w * .08f, cy + h * .30f, paint)
-            c.drawOval(right - w * .08f, cy - h * .30f, right + w * .15f, cy + h * .30f, paint)
-            paint.color = Color.rgb(67, 73, 79)
-            c.drawOval(cx - w * .23f, cy - h * .27f, cx + w * .23f, cy + h * .27f, paint)
+            // Simplified Drosophila CNS silhouette: bilateral optic lobes,
+            // central brain and a short ventral nerve cord. It is a visual map,
+            // while the nodes/links over it come from the retained connectome.
+            paint.color = Color.rgb(54, 61, 68)
+            c.drawOval(x + w * .055f, y + h * .18f, x + w * .29f, y + h * .73f, paint)
+            c.drawOval(x + w * .71f, y + h * .18f, x + w * .945f, y + h * .73f, paint)
 
-            val hubs = arrayOf(
-                floatArrayOf(left, cy),
-                floatArrayOf(right, cy),
-                floatArrayOf(cx - w * .13f, cy - h * .10f),
-                floatArrayOf(cx + w * .13f, cy - h * .10f),
-                floatArrayOf(cx, cy + h * .04f),
-                floatArrayOf(cx, cy + h * .22f),
-                floatArrayOf(cx, cy + h * .36f)
+            paint.color = Color.rgb(68, 75, 82)
+            c.drawOval(x + w * .27f, y + h * .22f, x + w * .73f, y + h * .70f, paint)
+
+            // Mushroom-body / central-complex hints.
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(1f, w * .002f)
+            paint.color = Color.argb(80, 175, 185, 193)
+            c.drawOval(x + w * .36f, y + h * .29f, x + w * .47f, y + h * .62f, paint)
+            c.drawOval(x + w * .53f, y + h * .29f, x + w * .64f, y + h * .62f, paint)
+            c.drawOval(x + w * .44f, y + h * .34f, x + w * .56f, y + h * .56f, paint)
+
+            // Antennal lobes and a compact central-complex marker.
+            paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(83, 91, 98)
+            c.drawCircle(x + w * .40f, y + h * .60f, min(w, h) * .045f, paint)
+            c.drawCircle(x + w * .60f, y + h * .60f, min(w, h) * .045f, paint)
+            c.drawCircle(cx, y + h * .45f, min(w, h) * .038f, paint)
+
+            // Ventral nerve cord.
+            paint.color = Color.rgb(48, 55, 61)
+            c.drawRoundRect(
+                cx - w * .055f, y + h * .66f,
+                cx + w * .055f, y + h * .92f,
+                w * .025f, w * .025f, paint
             )
 
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 1f
-            paint.color = Color.argb(75, 160, 170, 178)
-            for (i in hubs.indices) {
-                for (j in i + 1 until hubs.size) {
-                    if ((i * 3 + j) % 3 != 0) {
-                        c.drawLine(hubs[i][0], hubs[i][1], hubs[j][0], hubs[j][1], paint)
+            fun posForNeuron(id: Int): FloatArray {
+                val side = nodeSide[id].toInt()
+                val u = ((id * 1103515245L + 12345L) and 0x7fffffffL) / 2147483647f
+                val v2 = ((id * 1664525L + 1013904223L) and 0x7fffffffL) / 2147483647f
+                return when {
+                    id in VIS_START until VIS_END -> {
+                        val left = side < 0
+                        floatArrayOf(
+                            x + w * (if (left) .16f else .84f) + (u - .5f) * w * .14f,
+                            y + h * (.28f + v2 * .38f)
+                        )
                     }
-                }
-            }
-
-            // 300 visible representative nodes: the simulation contains 16,669
-            // neurons, but drawing every node would make the activity map unreadable.
-            val nodeN = 300
-            val nx = FloatArray(nodeN)
-            val ny = FloatArray(nodeN)
-            for (i in 0 until nodeN) {
-                val q = i / 10
-                val side = if (i % 2 == 0) -1f else 1f
-                val px = when {
-                    i < 70 -> cx + side * w * (.12f + .13f * ((q % 12) / 11f))
-                    i < 150 -> cx + side * w * (.04f + .08f * ((q % 10) / 9f))
-                    else -> cx + sin(i * .73f) * w * .20f
-                }
-                val py = when {
-                    i < 70 -> cy + sin(i * .41f) * h * .25f
-                    i < 150 -> cy + cos(i * .29f) * h * .20f
-                    else -> cy + sin(i * .37f) * h * .30f
-                }
-                nx[i] = px.coerceIn(x + 10f, x + w - 10f)
-                ny[i] = py.coerceIn(y + 10f, y + h - 10f)
-            }
-
-            paint.strokeWidth = .65f
-            for (i in 0 until nodeN step 2) {
-                val j = (i * 47 + 17) % nodeN
-                paint.color = Color.argb(45, 145, 155, 162)
-                c.drawLine(nx[i], ny[i], nx[j], ny[j], paint)
-            }
-
-            for (i in 0 until nodeN) {
-                val idx = when {
-                    i < 55 -> VIS_START + (i * 11) % (VIS_END - VIS_START)
-                    i < 85 -> OLF_START + (i * 7) % (OLF_END - OLF_START)
-                    i < 110 -> GUST_START + (i * 5) % (GUST_END - GUST_START)
-                    i < 150 -> OTHER_START + (i * 13) % maxOf(1, OTHER_END - OTHER_START)
-                    i < 210 -> OTHER_START + (i * 31) % maxOf(1, OTHER_END - OTHER_START)
-                    else -> MOTOR_START + (i * 3) % (MOTOR_END - MOTOR_START)
-                }
-                val active = fired[idx]
-                val membrane = ((v[idx] + .72f) / .75f).coerceIn(0f, 1f)
-                if (active) {
-                    paint.style = Paint.Style.FILL
-                    paint.color = Color.argb(75, 70, 220, 145)
-                    c.drawCircle(nx[i], ny[i], 7f, paint)
-                }
-                paint.style = Paint.Style.FILL
-                paint.color = if (active) {
-                    Color.rgb(255, 226, 65)
-                } else {
-                    Color.rgb(
-                        (60 + membrane * 85).toInt(),
-                        (65 + membrane * 75).toInt(),
-                        (72 + membrane * 70).toInt()
+                    id in OLF_START until OLF_END -> floatArrayOf(
+                        x + w * (if (side < 0) .40f else .60f) + (u - .5f) * w * .07f,
+                        y + h * (.48f + v2 * .18f)
+                    )
+                    id in GUST_START until GUST_END -> floatArrayOf(
+                        x + w * (if (side < 0) .44f else .56f) + (u - .5f) * w * .10f,
+                        y + h * (.55f + v2 * .16f)
+                    )
+                    id in MECH_START until MECH_END -> floatArrayOf(
+                        x + w * (if (side < 0) .35f else .65f) + (u - .5f) * w * .10f,
+                        y + h * (.55f + v2 * .23f)
+                    )
+                    id in DESC_START until DESC_END -> floatArrayOf(
+                        x + w * (if (side < 0) .46f else .54f) + (u - .5f) * w * .16f,
+                        y + h * (.62f + v2 * .12f)
+                    )
+                    id in ASC_START until ASC_END -> floatArrayOf(
+                        x + w * (if (side < 0) .47f else .53f) + (u - .5f) * w * .18f,
+                        y + h * (.65f + v2 * .12f)
+                    )
+                    id in MOTOR_START until MOTOR_END -> floatArrayOf(
+                        cx + (u - .5f) * w * .07f,
+                        y + h * (.73f + v2 * .16f)
+                    )
+                    else -> floatArrayOf(
+                        cx + (u - .5f) * w * .34f,
+                        y + h * (.28f + v2 * .42f)
                     )
                 }
-                c.drawCircle(nx[i], ny[i], if (active) 2.8f else 1.8f, paint)
             }
 
+            // Real retained edges between representative neurons.
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = .55f
+            for ((sourceRep, targetRep) in brainDisplayLinks) {
+                val sourceId = brainDisplayIds[sourceRep]
+                val targetId = brainDisplayIds[targetRep]
+                val a = posForNeuron(sourceId)
+                val b = posForNeuron(targetId)
+                val active = fired[sourceId] || fired[targetId]
+                paint.color = if (active) Color.argb(105, 112, 215, 160) else Color.argb(32, 150, 160, 168)
+                c.drawLine(a[0], a[1], b[0], b[1], paint)
+            }
+
+            // Draw representative neurons. Positions are deterministic functions
+            // of the real neuron ID, so the display remains stable between frames.
             paint.style = Paint.Style.FILL
-            paint.color = Color.rgb(210, 215, 218)
-            paint.textAlign = Paint.Align.CENTER
-            paint.textSize = 8f
+            for (rep in brainDisplayIds.indices) {
+                val id = brainDisplayIds[rep]
+                val p = posForNeuron(id)
+                val active = fired[id]
+                val route = max(routeForward[id], max(routeTurn[id], routeEscape[id]))
+                if (active) {
+                    paint.color = Color.argb(90, 70, 220, 150)
+                    c.drawCircle(p[0], p[1], 5.5f, paint)
+                    paint.color = Color.rgb(255, 226, 65)
+                    c.drawCircle(p[0], p[1], 2.1f, paint)
+                } else {
+                    val base = (62f + route * 80f).toInt().coerceIn(45, 150)
+                    paint.color = Color.rgb(base, base + 4, base + 9)
+                    c.drawCircle(p[0], p[1], 1.45f, paint)
+                }
+            }
+
+            paint.color = Color.rgb(190, 198, 202)
+            paint.textSize = 7f
             paint.typeface = Typeface.DEFAULT_BOLD
-            c.drawText("ÓPTICO", left, y + h - 6f, paint)
-            c.drawText("ÓPTICO", right, y + h - 6f, paint)
-            c.drawText("CENTRAL / MB / CX", cx, y + 12f, paint)
-            c.drawText("VNC · MOTOR", cx, y + h - 6f, paint)
+            paint.textAlign = Paint.Align.CENTER
+            c.drawText("ÓPTICO", x + w * .16f, y + h * .88f, paint)
+            c.drawText("ÓPTICO", x + w * .84f, y + h * .88f, paint)
+            c.drawText("CEREBRO CENTRAL", cx, y + h * .18f, paint)
+            c.drawText("VNC", cx, y + h * .97f, paint)
             paint.textAlign = Paint.Align.LEFT
         }
+
 
         private fun drawFly(c: Canvas, px: Float, py: Float, angle: Float) {
             c.save()
@@ -1395,9 +1506,14 @@ class MainActivity : Activity() {
                 c.drawLine(px + spread, py + kneeY, px + spread + 22f, py + kneeY + when (q) { 0 -> -4f; 1 -> 4f; else -> 8f }, paint)
             }
 
-            // Broad translucent wings with simple longitudinal veins.
+            // Animated wings: the beat is a visual consequence of measured wing
+            // activity and/or movement. It never feeds back into the neural model.
+            val wingVisual = max(wingActivityCache, (abs(flySpeed) / .010f).coerceIn(0f, 1f))
+            val wingBeat = sin(wingBeatPhase) * (3f + 12f * wingVisual)
+            val wingAlpha = (55f + 35f * wingVisual).toInt().coerceIn(45, 95)
+
             paint.style = Paint.Style.FILL
-            paint.color = Color.argb(78, 175, 205, 220)
+            paint.color = Color.argb(wingAlpha, 175, 205, 220)
             val wingL = android.graphics.Path().apply {
                 moveTo(px - 7f, py - 18f)
                 cubicTo(px - 46f, py - 72f, px - 105f, py - 92f, px - 122f, py - 58f)
@@ -1410,16 +1526,30 @@ class MainActivity : Activity() {
                 cubicTo(px + 132f, py - 35f, px + 82f, py - 8f, px + 13f, py - 2f)
                 close()
             }
+            c.save()
+            c.rotate(-wingBeat, px - 7f, py - 18f)
             c.drawPath(wingL, paint)
+            c.restore()
+            c.save()
+            c.rotate(wingBeat, px + 7f, py - 18f)
             c.drawPath(wingR, paint)
+            c.restore()
+
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 1.1f
             paint.color = Color.argb(150, 105, 135, 150)
-            for (side in intArrayOf(-1, 1)) {
-                c.drawLine(px + side * 15f, py - 20f, px + side * 102f, py - 58f, paint)
-                c.drawLine(px + side * 20f, py - 20f, px + side * 80f, py - 72f, paint)
-                c.drawLine(px + side * 32f, py - 18f, px + side * 112f, py - 42f, paint)
-            }
+            c.save()
+            c.rotate(-wingBeat, px - 7f, py - 18f)
+            c.drawLine(px - 15f, py - 20f, px - 102f, py - 58f, paint)
+            c.drawLine(px - 20f, py - 20f, px - 80f, py - 72f, paint)
+            c.drawLine(px - 32f, py - 18f, px - 112f, py - 42f, paint)
+            c.restore()
+            c.save()
+            c.rotate(wingBeat, px + 7f, py - 18f)
+            c.drawLine(px + 15f, py - 20f, px + 102f, py - 58f, paint)
+            c.drawLine(px + 20f, py - 20f, px + 80f, py - 72f, paint)
+            c.drawLine(px + 32f, py - 18f, px + 112f, py - 42f, paint)
+            c.restore()
 
             // Segmented abdomen, broad and tapered like the reference image.
             paint.style = Paint.Style.FILL
