@@ -550,6 +550,17 @@ def main(root: Path) -> None:
     retained_desc_motor = np.zeros((5, 8), dtype=np.int64)
     retained_sensor_desc_edges = 0
     retained_desc_motor_edges = 0
+
+    # Retained two-hop motor routes. Direct DN->MN contacts are not required:
+    # in the biological VNC, descending influence commonly reaches motor neurons
+    # through premotor/intermediate neurons. Count only paths formed by published
+    # edges between neurons that actually survived the 16,669-node reduction.
+    retained_desc_to_intermediate_edges = 0
+    retained_intermediate_to_motor_edges = 0
+    retained_desc_to_intermediate_to_motor_paths = 0
+    retained_two_hop_by_role = np.zeros((5, 8), dtype=np.int64)
+    desc_to_intermediate = {}
+    intermediate_to_motor = {}
     for bi in range(reader.num_record_batches):
         b = reader.get_batch(bi)
         pre = b.column(b.schema.get_field_index("body_pre")).to_numpy(zero_copy_only=False).astype(np.int64)
@@ -577,8 +588,33 @@ def main(root: Path) -> None:
                 if src_desc > 0 and dst_mr > 0:
                     retained_desc_motor[src_desc, dst_mr] += int(d)
                     retained_desc_motor_edges += 1
+
+                src_is_intermediate = (src_desc == 0 and int(motor_role_selected[src_i]) == 0)
+                dst_is_intermediate = (dst_desc == 0 and dst_mr == 0)
+                if src_desc > 0 and dst_is_intermediate:
+                    desc_to_intermediate.setdefault(src_i, set()).add(dst_i)
+                    retained_desc_to_intermediate_edges += 1
+                if src_is_intermediate and dst_mr > 0:
+                    intermediate_to_motor.setdefault(src_i, set()).add(dst_i)
+                    retained_intermediate_to_motor_edges += 1
         if bi % 50 == 0:
             print(f"edge pass batch {bi}/{reader.num_record_batches}", flush=True)
+
+    # Count actual retained DN -> intermediate -> motor paths. Each path is a
+    # real two-edge path in the published graph; no synthetic bridge is added.
+    for dn_i, mids in desc_to_intermediate.items():
+        dn_role = int(descending_role_selected[dn_i])
+        if dn_role <= 0:
+            continue
+        for mid_i in mids:
+            motors = intermediate_to_motor.get(mid_i)
+            if not motors:
+                continue
+            retained_desc_to_intermediate_to_motor_paths += len(motors)
+            for motor_i in motors:
+                mr = int(motor_role_selected[motor_i])
+                if mr > 0:
+                    retained_two_hop_by_role[dn_role, mr] += 1
 
     target_totals = np.zeros(TARGET, dtype=np.float64)
     for src, dst, raw_weight in edges:
@@ -592,7 +628,7 @@ def main(root: Path) -> None:
 
     ranges = {}
     for code, name in [(0,"visual"),(1,"olfactory"),(2,"gustatory"),(3,"mechanosensory"),(4,"other")]:
-        idxs = np.where(channel == code)[0]
+        idxs = np.where(channel_selected == code)[0]
         ranges[name] = [int(idxs.min()), int(idxs.max()+1)] if len(idxs) else [0,0]
 
     sc_list = sorted(selected["superclass"].astype(str).unique().tolist())
@@ -613,7 +649,7 @@ def main(root: Path) -> None:
             sc = SUPERCLASS_CODE[str(row.superclass)]
             side_text = clean(row.get("somaSide", ""))
             side = 1 if side_text == "R" else (-1 if side_text == "L" else 0)
-            ch = int(channel[i])
+            ch = int(channel_selected[i])
             f.write(struct.pack(
                 "<qbbbbbfff",
                 body,
@@ -692,6 +728,10 @@ def main(root: Path) -> None:
         "retained_desc_to_motor_edges": int(retained_desc_motor_edges),
         "retained_sensor_to_desc_contacts": int(retained_sensor_desc.sum()),
         "retained_desc_to_motor_contacts": int(retained_desc_motor.sum()),
+        "retained_desc_to_intermediate_edges": int(retained_desc_to_intermediate_edges),
+        "retained_intermediate_to_motor_edges": int(retained_intermediate_to_motor_edges),
+        "retained_desc_to_intermediate_to_motor_paths": int(retained_desc_to_intermediate_to_motor_paths),
+        "retained_desc_to_intermediate_to_motor_by_role_paths": retained_two_hop_by_role.tolist(),
         "retained_sensor_to_desc_by_channel_role_contacts": retained_sensor_desc.tolist(),
         "retained_desc_to_motor_by_role_contacts": retained_desc_motor.tolist(),
         "direct_sensor_desc_full_graph_weight": direct_sensor_desc.tolist(),

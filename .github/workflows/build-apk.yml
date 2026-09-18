@@ -150,6 +150,9 @@ jobs:
 
           assert "src_ch = int(channel_selected[src_i])" in s
           assert "src_ch = int(channel[src_i])" not in s
+          assert "ch = int(channel_selected[i])" in s
+          assert "np.where(channel_selected == code)[0]" in s
+          assert "np.where(channel == code)[0]" not in s
 
           print("REGRESION SELECTED-ARRAYS: OK")
           PY
@@ -215,9 +218,23 @@ jobs:
           assert d["edges_retained"] > 0
           assert d["contacts_retained_signed"] > 0
           assert d["retained_sensor_to_desc_edges"] > 0
-          assert d["retained_desc_to_motor_edges"] > 0
           assert d["retained_sensor_to_desc_contacts"] > 0
-          assert d["retained_desc_to_motor_contacts"] > 0
+
+          # Direct DN->MN connections are biologically sparse and are not a
+          # required condition for a valid motor pathway. Validate the actual
+          # retained two-hop architecture instead: DN -> intermediate/premotor
+          # -> VNC motor, using only published edges.
+          assert d["retained_desc_to_intermediate_edges"] > 0
+          assert d["retained_intermediate_to_motor_edges"] > 0
+          assert d["retained_desc_to_intermediate_to_motor_paths"] > 0
+
+          # Runtime population ranges must index the selected 16,669-node array.
+          ranges = d["channel_ranges"]
+          for name in ("visual", "olfactory", "gustatory", "mechanosensory"):
+              pair = ranges[name]
+              assert len(pair) == 2, (name, pair)
+              start, end = map(int, pair)
+              assert 0 <= start <= end <= 16669, (name, pair)
 
           rs = d["route_score_selected_counts"]
 
@@ -240,13 +257,21 @@ jobs:
           assert all(len(r) == 8 for r in desc_motor)
 
           assert sum(map(sum, sensor_desc)) > 0
-          assert sum(map(sum, desc_motor)) > 0
+          # The direct DN->MN matrix is diagnostic only; it may legitimately be
+          # zero in a reduced graph. The two-hop path matrix is the required test.
+          two_hop = d["retained_desc_to_intermediate_to_motor_by_role_paths"]
+          assert len(two_hop) == 5
+          assert all(len(r) == 8 for r in two_hop)
+          assert sum(map(sum, two_hop)) > 0
 
           print("REPORT Y RUTAS: OK")
           print("neurons:", d["neurons_retained"])
           print("edges:", d["edges_retained"])
           print("sensor->DN edges:", d["retained_sensor_to_desc_edges"])
-          print("DN->motor edges:", d["retained_desc_to_motor_edges"])
+          print("DN->motor direct edges (diagnostic):", d["retained_desc_to_motor_edges"])
+          print("DN->intermediate edges:", d["retained_desc_to_intermediate_edges"])
+          print("intermediate->motor edges:", d["retained_intermediate_to_motor_edges"])
+          print("DN->intermediate->motor paths:", d["retained_desc_to_intermediate_to_motor_paths"])
           print("route cells:", rs)
           PY
 
