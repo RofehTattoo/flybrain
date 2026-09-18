@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V0.99
+name: Build FlyBrain APK V1.00
 
 on:
   workflow_dispatch:
@@ -68,42 +68,42 @@ jobs:
 
 
       # ============================================================
-      # 6. COMPROBAR ZIP V0.99
+      # 6. COMPROBAR ZIP V1.00
       # ============================================================
 
-      - name: Comprobar ZIP V0.99
+      - name: Comprobar ZIP V1.00
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "COMPROBANDO ZIP FLYBRAIN V0.99"
+          echo "COMPROBANDO ZIP FLYBRAIN V1.00"
           echo "========================================"
 
-          test -f "FlyBrainV099_GitHub_Actions.zip"
+          test -f "FlyBrainV100_GitHub_Actions.zip"
 
-          unzip -t "FlyBrainV099_GitHub_Actions.zip" >/dev/null
+          unzip -t "FlyBrainV100_GitHub_Actions.zip" >/dev/null
 
-          ls -lh "FlyBrainV099_GitHub_Actions.zip"
+          ls -lh "FlyBrainV100_GitHub_Actions.zip"
 
-          echo "ZIP V0.99 CORRECTO"
+          echo "ZIP V1.00 CORRECTO"
 
 
       # ============================================================
-      # 7. DESCOMPRIMIR PROYECTO V0.99
+      # 7. DESCOMPRIMIR PROYECTO V1.00
       # ============================================================
 
-      - name: Descomprimir proyecto V0.99
+      - name: Descomprimir proyecto V1.00
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "DESCOMPRIMIENDO PROYECTO V0.99"
+          echo "DESCOMPRIMIENDO PROYECTO V1.00"
           echo "========================================"
 
           rm -rf proyecto
           mkdir -p proyecto
 
-          unzip -q "FlyBrainV099_GitHub_Actions.zip" -d proyecto
+          unzip -q "FlyBrainV100_GitHub_Actions.zip" -d proyecto
 
           echo "Comprobando estructura..."
 
@@ -121,7 +121,7 @@ jobs:
 
           test -f "proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
-          echo "ESTRUCTURA V0.99 CORRECTA"
+          echo "ESTRUCTURA V1.00 CORRECTA"
 
 
       # ============================================================
@@ -147,7 +147,7 @@ jobs:
       # 9. VALIDAR SCRIPT MALECNS
       # ============================================================
 
-      - name: Validar extractor MaleCNS V0.99
+      - name: Validar extractor MaleCNS V1.00
         working-directory: proyecto
         run: |
           set -euo pipefail
@@ -162,17 +162,17 @@ jobs:
 
 
       # ============================================================
-      # 10. GENERAR REDUCCIÓN MALECNS V0.99
+      # 10. GENERAR REDUCCIÓN MALECNS V1.00
       # ============================================================
 
-      - name: Generar reducción real MaleCNS V0.99
+      - name: Generar reducción real MaleCNS V1.00
         working-directory: proyecto
         run: |
           set -euo pipefail
 
           echo "========================================"
           echo "GENERANDO REDUCCION REAL MALECNS"
-          echo "VERSION V0.99"
+          echo "VERSION V1.00"
           echo "OBJETIVO: 16.669 NEURONAS"
           echo "========================================"
 
@@ -200,7 +200,7 @@ jobs:
           grep -Fq 'retained_desc_to_motor_edges' \
             "app/src/main/res/raw/malecns_reduced_report.json"
 
-          echo "ARCHIVOS MALECNS V0.99 GENERADOS Y VERIFICADOS"
+          echo "ARCHIVOS MALECNS V1.00 GENERADOS Y VERIFICADOS"
 
           ls -lh "app/src/main/res/raw/malecns_reduced.bin"
 
@@ -209,13 +209,13 @@ jobs:
       # 11. VERIFICAR ROLES MOTORES
       # ============================================================
 
-      - name: Verificar roles motores V0.99
+      - name: Verificar roles motores V1.00
         working-directory: proyecto
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "VERIFICANDO ROLES MOTORES V0.99"
+          echo "VERIFICANDO ROLES MOTORES V1.00"
           echo "========================================"
 
           META="app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
@@ -236,14 +236,14 @@ jobs:
 
           grep -Fq 'MOTOR_OTHER = 7' "$META"
 
-          echo "ROLES MOTORES V0.99 CORRECTOS"
+          echo "ROLES MOTORES V1.00 CORRECTOS"
 
 
       # ============================================================
       # 12. VERIFICAR ROLES DESCENDENTES
       # ============================================================
 
-      - name: Verificar roles descendentes V0.99
+      - name: Verificar roles descendentes V1.00
         working-directory: proyecto
         run: |
           set -euo pipefail
@@ -258,106 +258,163 @@ jobs:
 
           grep -Fq 'descending_role_definition' "$REPORT"
 
-          echo "ROLES DESCENDENTES V0.99 CORRECTOS"
+          echo "ROLES DESCENDENTES V1.00 CORRECTOS"
 
 
       # ============================================================
-      # 13. VERIFICAR DIAGNÓSTICO NEURAL V0.99
+      # 13. VERIFICAR TRAZA SINAPTICA
       # ============================================================
 
-      - name: Verificar diagnóstico neural V0.99
+      - name: Verificar integración sináptica V1.00
         working-directory: proyecto
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "VERIFICANDO DIAGNOSTICO NEURAL V0.99"
+          echo "VERIFICANDO TRAZA SINAPTICA V1.00"
           echo "========================================"
 
           MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
-
-          # --------------------------------------------------------
-          # TRAZA SINAPTICA
-          # --------------------------------------------------------
 
           grep -Fq 'synTrace' "$MAIN"
 
           grep -Fq 'synDecay' "$MAIN"
 
-          grep -Fq 'spike creates a short-lived synaptic trace' "$MAIN"
+          echo "TRAZA SINAPTICA V1.00 CORRECTA"
 
 
-          # --------------------------------------------------------
-          # ACTIVIDAD SENSORIAL REAL
-          # --------------------------------------------------------
+      # ============================================================
+      # 14. VERIFICAR DIAGNÓSTICO SENSORIAL
+      # ============================================================
 
-          grep -Fq 'visualRate' "$MAIN"
+      - name: Verificar diagnóstico sensorial V1.00
+        working-directory: proyecto
+        run: |
+          set -euo pipefail
 
-          grep -Fq 'olfactoryRate' "$MAIN"
+          echo "========================================"
+          echo "VERIFICANDO DIAGNOSTICO SENSORIAL"
+          echo "========================================"
 
-          grep -Fq 'gustatoryRate' "$MAIN"
+          MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
 
-          grep -Fq 'mechanosensoryRate' "$MAIN"
+          grep -Fq 'visualRateDisplay' "$MAIN"
+
+          grep -Fq 'olfactoryRateDisplay' "$MAIN"
+
+          grep -Fq 'gustatoryRateDisplay' "$MAIN"
+
+          grep -Fq 'mechanosensoryRateDisplay' "$MAIN"
+
+          echo "DIAGNOSTICO SENSORIAL CORRECTO"
 
 
-          # --------------------------------------------------------
-          # ACTIVIDAD CENTRAL
-          # --------------------------------------------------------
+      # ============================================================
+      # 15. VERIFICAR DIAGNÓSTICO CENTRAL / DESCENDENTE / MOTOR
+      # ============================================================
 
-          grep -Fq 'centralRate' "$MAIN"
+      - name: Verificar diagnóstico neural V1.00
+        working-directory: proyecto
+        run: |
+          set -euo pipefail
+
+          echo "========================================"
+          echo "VERIFICANDO DIAGNOSTICO NEURAL V1.00"
+          echo "========================================"
+
+          MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
+
+          # CENTRAL
 
           grep -Fq 'centralRateDisplay' "$MAIN"
 
-
-          # --------------------------------------------------------
-          # ACTIVIDAD DESCENDENTE
-          # --------------------------------------------------------
-
-          grep -Fq 'descendingRate' "$MAIN"
+          # DESCENDENTES
 
           grep -Fq 'descendingRateDisplay' "$MAIN"
 
-
-          # --------------------------------------------------------
-          # ACTIVIDAD ASCENDENTE
-          # --------------------------------------------------------
-
-          grep -Fq 'ascendingRate' "$MAIN"
+          # ASCENDENTES
 
           grep -Fq 'ascendingRateDisplay' "$MAIN"
 
-
-          # --------------------------------------------------------
-          # ACTIVIDAD MOTOR / VNC
-          # --------------------------------------------------------
-
-          grep -Fq 'motorRate' "$MAIN"
+          # MOTOR / VNC
 
           grep -Fq 'motorRateDisplay' "$MAIN"
 
-
-          # --------------------------------------------------------
-          # LOCOMOCIÓN REAL
-          # --------------------------------------------------------
+          # LOCOMOCION
 
           grep -Fq 'stableLocomotion' "$MAIN"
 
           grep -Fq 'motorLocomotion' "$MAIN"
 
-
-          echo "DIAGNOSTICO NEURAL V0.99 CORRECTO"
+          echo "DIAGNOSTICO NEURAL V1.00 CORRECTO"
 
 
       # ============================================================
-      # 14. VERIFICAR PROYECTO V0.99
+      # 16. VERIFICAR SELECCIÓN DE ACCIONES
       # ============================================================
 
-      - name: Verificar proyecto V0.99
+      - name: Verificar selección de acciones V1.00
+        working-directory: proyecto
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "VERIFICANDO PROYECTO FLYBRAIN V0.99"
+          echo "VERIFICANDO SELECCION DE ACCIONES V1.00"
+          echo "========================================"
+
+          MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
+
+          # --------------------------------------------------------
+          # APROXIMACION
+          # --------------------------------------------------------
+
+          grep -Fq 'approachAction' "$MAIN"
+
+          # --------------------------------------------------------
+          # ESCAPE
+          # --------------------------------------------------------
+
+          grep -Fq 'escapeAction' "$MAIN"
+
+          # --------------------------------------------------------
+          # ORIENTACION
+          # --------------------------------------------------------
+
+          grep -Fq 'orientAction' "$MAIN"
+
+          # --------------------------------------------------------
+          # EXPLORACION
+          # --------------------------------------------------------
+
+          grep -Fq 'exploreAction' "$MAIN"
+
+          # --------------------------------------------------------
+          # FRENADO
+          # --------------------------------------------------------
+
+          grep -Fq 'brakeAction' "$MAIN"
+
+          # --------------------------------------------------------
+          # GIRO IZQUIERDA / DERECHA
+          # --------------------------------------------------------
+
+          grep -Fq 'turnLeftAction' "$MAIN"
+
+          grep -Fq 'turnRightAction' "$MAIN"
+
+          echo "SELECCION DE ACCIONES V1.00 CORRECTA"
+
+
+      # ============================================================
+      # 17. VERIFICAR PROYECTO V1.00
+      # ============================================================
+
+      - name: Verificar proyecto V1.00
+        run: |
+          set -euo pipefail
+
+          echo "========================================"
+          echo "VERIFICANDO PROYECTO FLYBRAIN V1.00"
           echo "========================================"
 
           APP_GRADLE="proyecto/app/build.gradle.kts"
@@ -375,11 +432,11 @@ jobs:
           # VERSION
           # --------------------------------------------------------
 
-          grep -Fq 'versionCode = 99' "$APP_GRADLE"
+          grep -Fq 'versionCode = 100' "$APP_GRADLE"
 
-          grep -Fq 'versionName = "0.99"' "$APP_GRADLE"
+          grep -Fq 'versionName = "1.00"' "$APP_GRADLE"
 
-          grep -Fq 'FLYBRAIN V0.99' "$MAIN"
+          grep -Fq 'FLYBRAIN V1.00' "$MAIN"
 
           # --------------------------------------------------------
           # NEURONAS
@@ -393,7 +450,7 @@ jobs:
           # FORMATO BINARIO
           # --------------------------------------------------------
 
-          grep -Fq 'FBC99' "$MAIN"
+          grep -Fq 'FBC100' "$MAIN"
 
           # --------------------------------------------------------
           # ESTADO LOCOMOTOR
@@ -430,41 +487,71 @@ jobs:
           grep -Fq 'mechanosensoryRateDisplay' "$MAIN"
 
           # --------------------------------------------------------
-          # DIAGNOSTICO MOTOR
+          # DIAGNOSTICO NEURAL
           # --------------------------------------------------------
+
+          grep -Fq 'centralRateDisplay' "$MAIN"
+
+          grep -Fq 'descendingRateDisplay' "$MAIN"
+
+          grep -Fq 'ascendingRateDisplay' "$MAIN"
 
           grep -Fq 'motorRateDisplay' "$MAIN"
 
+          # --------------------------------------------------------
+          # LOCOMOCION
+          # --------------------------------------------------------
+
           grep -Fq 'stableLocomotion' "$MAIN"
 
+          grep -Fq 'motorLocomotion' "$MAIN"
+
+          # --------------------------------------------------------
+          # SELECCION DE ACCIONES
+          # --------------------------------------------------------
+
+          grep -Fq 'approachAction' "$MAIN"
+
+          grep -Fq 'escapeAction' "$MAIN"
+
+          grep -Fq 'orientAction' "$MAIN"
+
+          grep -Fq 'exploreAction' "$MAIN"
+
+          grep -Fq 'brakeAction' "$MAIN"
+
+          grep -Fq 'turnLeftAction' "$MAIN"
+
+          grep -Fq 'turnRightAction' "$MAIN"
 
           echo "========================================"
-          echo "PROYECTO V0.99 VALIDADO"
+          echo "PROYECTO V1.00 VALIDADO"
           echo "========================================"
 
-          echo "Version: 0.99"
-          echo "VersionCode: 99"
+          echo "Version: 1.00"
+          echo "VersionCode: 100"
           echo "Neuronas: 16.669"
-          echo "Formato binario: FBC99"
+          echo "Formato binario: FBC100"
           echo "MaleCNS: OK"
           echo "Functional bridge selection: OK"
           echo "VNC motor output: OK"
           echo "Descending roles: OK"
           echo "Neural diagnostic layer: OK"
           echo "Synaptic temporal traces: OK"
+          echo "Action selection: OK"
 
 
       # ============================================================
-      # 15. COMPILAR APK
+      # 18. COMPILAR APK
       # ============================================================
 
-      - name: Compilar APK V0.99
+      - name: Compilar APK V1.00
         working-directory: proyecto
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "COMPILANDO APK FLYBRAIN V0.99"
+          echo "COMPILANDO APK FLYBRAIN V1.00"
           echo "========================================"
 
           gradle --version
@@ -477,15 +564,15 @@ jobs:
 
 
       # ============================================================
-      # 16. VERIFICAR APK
+      # 19. VERIFICAR APK
       # ============================================================
 
-      - name: Verificar APK V0.99
+      - name: Verificar APK V1.00
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "VERIFICANDO APK V0.99"
+          echo "VERIFICANDO APK V1.00"
           echo "========================================"
 
           APK="proyecto/app/build/outputs/apk/debug/app-debug.apk"
@@ -498,18 +585,18 @@ jobs:
           ls -lh "$APK"
 
           echo "========================================"
-          echo "APK V0.99 VERIFICADO CORRECTAMENTE"
+          echo "APK V1.00 VERIFICADO CORRECTAMENTE"
           echo "========================================"
 
 
       # ============================================================
-      # 17. SUBIR APK COMO ARTIFACT
+      # 20. SUBIR APK COMO ARTIFACT
       # ============================================================
 
-      - name: Subir APK V0.99
+      - name: Subir APK V1.00
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V0.99-APK
+          name: FlyBrain-V1.00-APK
           path: proyecto/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
