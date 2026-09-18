@@ -10,45 +10,97 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
+      # 1. Descargar el repositorio
       - name: Descargar proyecto
         uses: actions/checkout@v4
 
+
+      # 2. Preparar Java 17
       - name: Preparar Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
+
+      # 3. Preparar Android SDK
       - name: Preparar Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-35 build-tools;35.0.0'
 
+
+      # 4. Instalar Gradle
       - name: Instalar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
+
+      # 5. Descomprimir el proyecto V0.92
       - name: Descomprimir proyecto
         run: |
-          mkdir proyecto
-          mkdir proyecto_tmp
-          unzip -q FlyBrainV091_GitHub_Actions.zip -d proyecto_tmp
-          cp -r proyecto_tmp/FlyBrainV091_GitHub_Actions/. proyecto/
+          set -e
+
+          mkdir -p proyecto
+          mkdir -p proyecto_tmp
+
+          unzip -q FlyBrainV092_GitHub_Actions.zip -d proyecto_tmp
+
+          cp -r proyecto_tmp/FlyBrainV092_GitHub_Actions/. proyecto/
+
           rm -rf proyecto_tmp
 
-      - name: Verificar proyecto
+          echo "Contenido del proyecto:"
+          find proyecto -maxdepth 3 -type f | sort
+
+
+      # 6. Verificar que realmente es V0.92
+      - name: Verificar proyecto V0.92
         run: |
+          set -e
+
           test -f proyecto/app/build.gradle.kts
           test -f proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
-          echo "Proyecto V0.91 encontrado correctamente"
 
+          grep -q 'versionCode = 92' proyecto/app/build.gradle.kts
+          grep -q 'versionName = "0.92"' proyecto/app/build.gradle.kts
+          grep -q 'FLYBRAIN V0.92' proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -q 'N=16669' proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt
+
+          echo "========================================"
+          echo "Proyecto V0.92 encontrado correctamente"
+          echo "16.669 neuronas"
+          echo "MaleCNS reducido al 10%"
+          echo "========================================"
+
+
+      # 7. Compilar APK
       - name: Compilar APK
         working-directory: proyecto
-        run: gradle :app:assembleDebug
+        run: |
+          gradle :app:assembleDebug --stacktrace
 
+
+      # 8. Comprobar que el APK existe
+      - name: Verificar APK
+        run: |
+          set -e
+
+          test -f proyecto/app/build/outputs/apk/debug/app-debug.apk
+
+          echo "========================================"
+          echo "APK generado correctamente"
+          echo "========================================"
+
+          ls -lh proyecto/app/build/outputs/apk/debug/app-debug.apk
+
+
+      # 9. Guardar APK como Artifact
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V0.91-APK
+          name: FlyBrain-V0.92-APK
           path: proyecto/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
