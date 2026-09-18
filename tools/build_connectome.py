@@ -280,7 +280,12 @@ def main(root: Path) -> None:
     threat_escape = np.sqrt(np.maximum(0.0, (sensor_in[0] + sensor_in[3]) * cell_to_desc[4]))
 
     forward_motor_path = np.sqrt(np.maximum(0.0, desc_to_cell[1] * cell_to_motor[1]))
-    turn_motor_path = np.sqrt(np.maximum(0.0, desc_to_cell[2] * cell_to_motor[1]))
+    # Turning/steering can recruit coordinated motor outputs. The route score
+    # therefore considers every curated motor-role channel rather than only legs.
+    turn_motor_outputs = cell_to_motor[1:].sum(axis=0)
+    turn_motor_path = np.sqrt(
+        np.maximum(0.0, desc_to_cell[2] * turn_motor_outputs)
+    )
     escape_motor_path = np.sqrt(np.maximum(
         0.0,
         desc_to_cell[4] * (cell_to_motor[1] + cell_to_motor[2] + cell_to_motor[6])
@@ -293,6 +298,14 @@ def main(root: Path) -> None:
         0.0,
         sensor_in.sum(axis=0) * cell_to_motor[1:].sum(axis=0)
     ))
+
+    # If the published graph has no turn-route candidate at all, fail here with
+    # a diagnostic instead of producing a misleading zero route in the report.
+    if not np.any(route_turn > 0):
+        raise RuntimeError(
+            "MaleCNS v1.0 contains no positive two-hop turn-route candidate "
+            "under the current published-role annotations"
+        )
 
     def normalize_score(x):
         m = float(np.nanmax(x)) if len(x) else 0.0
@@ -359,8 +372,7 @@ def main(root: Path) -> None:
     # by the forced/type-diversity stages. Ascending neurons remain eligible as
     # measured intermediate/feedback cells.
     intermediate_pool = pool[
-        (pool["channel"] >= 4)
-        & (~pool["superclass"].astype(str).isin({"descending_neuron", "vnc_motor"}))
+        ~pool["superclass"].astype(str).isin({"descending_neuron", "vnc_motor"})
     ].copy()
 
     # Reserve route cells by functional family. Quotas are capped by the
@@ -373,7 +385,30 @@ def main(root: Path) -> None:
     }
     route_parts = []
     route_ids = set()
+
+    # Explicitly protect cells with a positive measured turn route before
+    # allocating the other route-family quotas. No edge is created here.
+    positive_turn = intermediate_pool[
+        intermediate_pool["route_turn"] > 0
+    ].sort_values(
+        ["route_turn", "route_score", "degree", "bodyId"],
+        ascending=[False, False, False, True],
+    )
+
+    if len(positive_turn) and remaining_slots > 0:
+        take_turn = min(
+            route_quota["route_turn"],
+            remaining_slots,
+            len(positive_turn),
+        )
+        turn_seed = positive_turn.head(take_turn)
+        route_parts.append(turn_seed)
+        route_ids.update(turn_seed.bodyId.astype(int).tolist())
+        remaining_slots -= len(turn_seed)
+
     for score_col, quota in route_quota.items():
+        if score_col == "route_turn":
+            continue
         if remaining_slots <= 0:
             break
         take = min(quota, remaining_slots)
@@ -454,6 +489,11 @@ def main(root: Path) -> None:
     selected = selected.drop_duplicates("bodyId").reset_index(drop=True)
     if len(selected) != TARGET:
         raise AssertionError((len(selected), TARGET))
+
+    if not np.any(selected["route_turn"].to_numpy(np.float64) > 0):
+        raise AssertionError(
+            "selected set contains no non-zero published turn-route cell"
+        )
 
     # Stable anatomical ordering: sensory channels first, then descending,
     # ascending, motor and the remaining central/intrinsic populations. This
@@ -550,9 +590,13 @@ def main(root: Path) -> None:
     edges = normalized_edges
     edges.sort(key=lambda e: (e[1], e[0]))
 
+    # Runtime ranges MUST use the final 16,669-node selected array.
+    # `channel` indexes the full source table (166,691 neurons), so using it
+    # here can generate ranges outside the reduced Android array.
+    selected_channel = selected["channel"].to_numpy(np.int8)
     ranges = {}
     for code, name in [(0,"visual"),(1,"olfactory"),(2,"gustatory"),(3,"mechanosensory"),(4,"other")]:
-        idxs = np.where(channel == code)[0]
+        idxs = np.where(selected_channel == code)[0]
         ranges[name] = [int(idxs.min()), int(idxs.max()+1)] if len(idxs) else [0,0]
 
     sc_list = sorted(selected["superclass"].astype(str).unique().tolist())
@@ -614,6 +658,12 @@ def main(root: Path) -> None:
         "escape_high": int((route_escape_selected >= 0.25).sum()),
     }
 
+    source_route_counts = {
+        "forward_nonzero": int((route_forward > 0).sum()),
+        "turn_nonzero": int((route_turn > 0).sum()),
+        "escape_nonzero": int((route_escape > 0).sum()),
+    }
+
     report = {
         "dataset": "MaleCNS v1.0",
         "flybrain_version": "1.02",
@@ -639,6 +689,7 @@ def main(root: Path) -> None:
         "motor_role_definition": "derived from curated annotation text for vnc_motor cells; runtime movement is driven only by measured vnc_motor activity",
         "descending_role_definition": "derived from published annotation text; used as descriptive metadata and not as a synthetic current source",
         "route_score_definition": "two-hop geometric-mean topology scores from published sensor->candidate->DN and DN->candidate->motor paths; used for selection and diagnostic weighting only",
+        "route_score_source_counts": source_route_counts,
         "route_score_selected_counts": selected_route_counts,
         "route_quota_requested": route_quota,
         "retained_sensor_to_desc_edges": int(retained_sensor_desc_edges),
