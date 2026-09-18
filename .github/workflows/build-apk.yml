@@ -97,13 +97,18 @@ jobs:
           grep -Fq 'NODE_SIZE = 25' "$BUILDER"
           grep -Fq 'EDGE_SIZE = 12' "$BUILDER"
 
-          if grep -Fq 'FlyBrainV101_GitHub_Actions.zip' .github/workflows/build-apk.yml; then
-            echo "ERROR: referencia V1.01 detectada"
+          # Construimos las referencias legacy dinámicamente para que esta
+          # propia comprobación no se detecte a sí misma.
+          LEGACY_ZIP="FlyBrainV$(printf '101')_GitHub_Actions.zip"
+          LEGACY_MAGIC="FBC$(printf '101')"
+
+          if grep -Fq "$LEGACY_ZIP" .github/workflows/build-apk.yml; then
+            echo "ERROR: referencia de archivo V1.01 detectada en el workflow"
             exit 1
           fi
 
-          if grep -Fq 'FBC101' .github/workflows/build-apk.yml; then
-            echo "ERROR: referencia FBC101 detectada"
+          if grep -Fq "$LEGACY_MAGIC" .github/workflows/build-apk.yml; then
+            echo "ERROR: formato binario legacy detectado en el workflow"
             exit 1
           fi
 
