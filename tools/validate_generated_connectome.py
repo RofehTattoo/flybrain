@@ -97,7 +97,10 @@ def main(root: Path) -> None:
         "OTHER_START": ranges["other"][0], "OTHER_END": ranges["other"][1],
     }
     for name, value in meta_expected.items():
-        assert parse_meta_int(meta, name) == int(value), (name, value)
+        actual = parse_meta_int(meta, name)
+        assert actual == int(value), (
+            f"metadata mismatch {name}: generated={actual}, report={int(value)}"
+        )
 
     assert parse_meta_int(meta, "NEURONS") == TARGET
     assert parse_meta_int(meta, "FORMAT_VERSION") == 102

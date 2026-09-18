@@ -13,6 +13,8 @@ import json
 import math
 import re
 import struct
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -47,13 +49,37 @@ NT_SIGN = {
 SUPERCLASS_CODE = {}
 
 def download(path: Path, name: str) -> None:
+    """Download a source table atomically with retries.
+
+    The MaleCNS weight table is large, so a transient HTTP/network failure must
+    not leave a truncated file that a later run silently reuses.
+    """
     if path.exists() and path.stat().st_size > 0:
         return
     url = BASE + name
     tmp = path.with_suffix(path.suffix + ".partial")
     print(f"Downloading {name} ...", flush=True)
-    urllib.request.urlretrieve(url, tmp)
-    tmp.replace(path)
+    last_error = None
+    for attempt in range(1, 5):
+        try:
+            if tmp.exists():
+                tmp.unlink()
+            with urllib.request.urlopen(url, timeout=120) as response, tmp.open("wb") as out:
+                while True:
+                    chunk = response.read(8 * 1024 * 1024)
+                    if not chunk:
+                        break
+                    out.write(chunk)
+            if tmp.stat().st_size <= 0:
+                raise IOError(f"empty download for {name}")
+            tmp.replace(path)
+            return
+        except (OSError, IOError, urllib.error.URLError) as exc:
+            last_error = exc
+            print(f"download attempt {attempt}/4 failed for {name}: {exc}", flush=True)
+            if attempt < 4:
+                time.sleep(5 * attempt)
+    raise RuntimeError(f"could not download {name} after 4 attempts: {last_error}")
 
 
 def clean(x):
@@ -724,6 +750,12 @@ def main(root: Path) -> None:
         idxs = np.where(channel_selected == code)[0]
         ranges[name] = [int(idxs.min()), int(idxs.max()+1)] if len(idxs) else [0,0]
 
+    # Internal consistency check: the runtime `OTHER` population is defined by
+    # channel 4, not by the final selection block. Keep this invariant explicit
+    # so a future refactor cannot reintroduce the source-index/range mismatch.
+    assert ranges["other"][0] == ranges["mechanosensory"][1]
+    assert ranges["other"][1] == TARGET
+
     sc_list = sorted(selected["superclass"].astype(str).unique().tolist())
     SUPERCLASS_CODE.clear()
     SUPERCLASS_CODE.update({s:i for i,s in enumerate(sc_list)})
@@ -765,8 +797,12 @@ def main(root: Path) -> None:
     desc = superclass_range("descending_neuron")
     asc = superclass_range("ascending_neuron")
     vmotor = superclass_range("vnc_motor")
-    other_idx = np.where(selected["block"].to_numpy() == 7)[0]
-    other = (int(other_idx.min()), int(other_idx.max()+1)) if len(other_idx) else (0,0)
+    # `channel_ranges["other"]` is the complete runtime central/other block.
+    # Do NOT derive it from `block == 7`: that block is only the final subset
+    # after descending, ascending and VNC-motor populations. Using block 7 here
+    # leaks a different semantic range into GeneratedConnectomeMeta.kt and was
+    # the cause of the V1.02/V1.03 OTHER_START validation failure.
+    other = (int(ranges["other"][0]), int(ranges["other"][1]))
 
     meta = root / "app" / "src" / "main" / "java" / "com" / "example" / "flybrain" / "GeneratedConnectomeMeta.kt"
     motor_role_counts = {int(k): int(v) for k,v in selected.groupby("motor_role").size().to_dict().items()}

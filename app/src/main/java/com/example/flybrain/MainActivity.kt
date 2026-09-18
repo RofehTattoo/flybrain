@@ -524,8 +524,13 @@ class MainActivity : Activity() {
                         throw IllegalStateException("metadata de ruta invalida en nodo $it")
                     }
                 }
-                val l = Array(n) { mutableListOf<Int>() }
-                val ws = Array(n) { mutableListOf<Float>() }
+                // Build exact-size incoming arrays in two passes. The previous
+                // implementation accumulated ~2 million boxed Int/Float values
+                // in MutableLists, creating a large transient heap spike during
+                // APK startup. We only need the final primitive arrays.
+                val incomingCounts = IntArray(n)
+                val edgeStart = b.position()
+                var previousKey = -1L
                 repeat(e) {
                     val src = b.int
                     val dst = b.int
@@ -536,16 +541,34 @@ class MainActivity : Activity() {
                     if (!weight.isFinite() || weight == 0f) {
                         throw IllegalStateException("edge[$it] con peso invalido")
                     }
-                    l[dst].add(src)
-                    ws[dst].add(weight)
+                    val key = (dst.toLong() shl 32) or (src.toLong() and 0xffffffffL)
+                    if (key < previousKey) {
+                        throw IllegalStateException("edges fuera de orden en registro $it")
+                    }
+                    previousKey = key
+                    incomingCounts[dst]++
                 }
+
+                for (i in 0 until n) {
+                    incoming[i] = IntArray(incomingCounts[i])
+                    incomingW[i] = FloatArray(incomingCounts[i])
+                    baseW[i] = FloatArray(incomingCounts[i])
+                    eligibility[i] = FloatArray(incomingCounts[i])
+                }
+
+                b.position(edgeStart)
+                val writeAt = IntArray(n)
+                repeat(e) {
+                    val src = b.int
+                    val dst = b.int
+                    val weight = b.float
+                    val k = writeAt[dst]++
+                    incoming[dst][k] = src
+                    incomingW[dst][k] = weight
+                    baseW[dst][k] = weight
+                }
+
                 if (b.hasRemaining()) throw IllegalStateException("bytes restantes=${b.remaining()}")
-                for (i in 0 until N) {
-                    incoming[i] = l[i].toIntArray()
-                    incomingW[i] = ws[i].toFloatArray()
-                    baseW[i] = incomingW[i].clone()
-                    eligibility[i] = FloatArray(incomingW[i].size)
-                }
                 loadedEdgeCount = e
                 connectomeError = ""
                 true
