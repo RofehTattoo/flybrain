@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V0.98
+name: Build FlyBrain APK V0.99
 
 on:
   workflow_dispatch:
@@ -68,42 +68,42 @@ jobs:
 
 
       # ============================================================
-      # 6. COMPROBAR ZIP V0.98
+      # 6. COMPROBAR ZIP V0.99
       # ============================================================
 
-      - name: Comprobar ZIP V0.98
+      - name: Comprobar ZIP V0.99
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "COMPROBANDO ZIP FLYBRAIN V0.98"
+          echo "COMPROBANDO ZIP FLYBRAIN V0.99"
           echo "========================================"
 
-          test -f "FlyBrainV098_GitHub_Actions.zip"
+          test -f "FlyBrainV099_GitHub_Actions.zip"
 
-          unzip -t "FlyBrainV098_GitHub_Actions.zip" >/dev/null
+          unzip -t "FlyBrainV099_GitHub_Actions.zip" >/dev/null
 
-          ls -lh "FlyBrainV098_GitHub_Actions.zip"
+          ls -lh "FlyBrainV099_GitHub_Actions.zip"
 
-          echo "ZIP V0.98 CORRECTO"
+          echo "ZIP V0.99 CORRECTO"
 
 
       # ============================================================
-      # 7. DESCOMPRIMIR PROYECTO V0.98
+      # 7. DESCOMPRIMIR PROYECTO V0.99
       # ============================================================
 
-      - name: Descomprimir proyecto V0.98
+      - name: Descomprimir proyecto V0.99
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "DESCOMPRIMIENDO PROYECTO V0.98"
+          echo "DESCOMPRIMIENDO PROYECTO V0.99"
           echo "========================================"
 
           rm -rf proyecto
           mkdir -p proyecto
 
-          unzip -q "FlyBrainV098_GitHub_Actions.zip" -d proyecto
+          unzip -q "FlyBrainV099_GitHub_Actions.zip" -d proyecto
 
           echo "Comprobando estructura..."
 
@@ -121,7 +121,7 @@ jobs:
 
           test -f "proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
-          echo "ESTRUCTURA V0.98 CORRECTA"
+          echo "ESTRUCTURA V0.99 CORRECTA"
 
 
       # ============================================================
@@ -147,7 +147,7 @@ jobs:
       # 9. VALIDAR SCRIPT MALECNS
       # ============================================================
 
-      - name: Validar extractor MaleCNS V0.98
+      - name: Validar extractor MaleCNS V0.99
         working-directory: proyecto
         run: |
           set -euo pipefail
@@ -162,17 +162,17 @@ jobs:
 
 
       # ============================================================
-      # 10. GENERAR REDUCCIÓN MALECNS V0.98
+      # 10. GENERAR REDUCCIÓN MALECNS V0.99
       # ============================================================
 
-      - name: Generar reducción real MaleCNS V0.98
+      - name: Generar reducción real MaleCNS V0.99
         working-directory: proyecto
         run: |
           set -euo pipefail
 
           echo "========================================"
           echo "GENERANDO REDUCCION REAL MALECNS"
-          echo "VERSION V0.98"
+          echo "VERSION V0.99"
           echo "OBJETIVO: 16.669 NEURONAS"
           echo "========================================"
 
@@ -200,7 +200,7 @@ jobs:
           grep -Fq 'retained_desc_to_motor_edges' \
             "app/src/main/res/raw/malecns_reduced_report.json"
 
-          echo "ARCHIVOS MALECNS V0.98 GENERADOS Y VERIFICADOS"
+          echo "ARCHIVOS MALECNS V0.99 GENERADOS Y VERIFICADOS"
 
           ls -lh "app/src/main/res/raw/malecns_reduced.bin"
 
@@ -209,13 +209,13 @@ jobs:
       # 11. VERIFICAR ROLES MOTORES
       # ============================================================
 
-      - name: Verificar roles motores V0.98
+      - name: Verificar roles motores V0.99
         working-directory: proyecto
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "VERIFICANDO ROLES MOTORES V0.98"
+          echo "VERIFICANDO ROLES MOTORES V0.99"
           echo "========================================"
 
           META="app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
@@ -236,14 +236,14 @@ jobs:
 
           grep -Fq 'MOTOR_OTHER = 7' "$META"
 
-          echo "ROLES MOTORES V0.98 CORRECTOS"
+          echo "ROLES MOTORES V0.99 CORRECTOS"
 
 
       # ============================================================
       # 12. VERIFICAR ROLES DESCENDENTES
       # ============================================================
 
-      - name: Verificar roles descendentes V0.98
+      - name: Verificar roles descendentes V0.99
         working-directory: proyecto
         run: |
           set -euo pipefail
@@ -258,19 +258,49 @@ jobs:
 
           grep -Fq 'descending_role_definition' "$REPORT"
 
-          echo "ROLES DESCENDENTES V0.98 CORRECTOS"
+          echo "ROLES DESCENDENTES V0.99 CORRECTOS"
 
 
       # ============================================================
-      # 13. VERIFICAR PROYECTO V0.98
+      # 13. VERIFICAR DIAGNÓSTICO NEURAL V0.99
       # ============================================================
 
-      - name: Verificar proyecto V0.98
+      - name: Verificar diagnóstico neural V0.99
+        working-directory: proyecto
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "VERIFICANDO PROYECTO FLYBRAIN V0.98"
+          echo "VERIFICANDO DIAGNOSTICO NEURAL V0.99"
+          echo "========================================"
+
+          MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
+
+          grep -Fq 'sensoryTrace' "$MAIN"
+
+          grep -Fq 'centralTrace' "$MAIN"
+
+          grep -Fq 'descendingTrace' "$MAIN"
+
+          grep -Fq 'motorTrace' "$MAIN"
+
+          grep -Fq 'synapticTrace' "$MAIN"
+
+          grep -Fq 'stableLocomotion' "$MAIN"
+
+          echo "DIAGNOSTICO NEURAL V0.99 CORRECTO"
+
+
+      # ============================================================
+      # 14. VERIFICAR PROYECTO V0.99
+      # ============================================================
+
+      - name: Verificar proyecto V0.99
+        run: |
+          set -euo pipefail
+
+          echo "========================================"
+          echo "VERIFICANDO PROYECTO FLYBRAIN V0.99"
           echo "========================================"
 
           APP_GRADLE="proyecto/app/build.gradle.kts"
@@ -284,50 +314,43 @@ jobs:
           test -f "proyecto/app/src/main/res/raw/malecns_reduced.bin"
           test -f "$REPORT"
 
-          grep -Fq 'versionCode = 98' "$APP_GRADLE"
+          grep -Fq 'versionCode = 99' "$APP_GRADLE"
 
-          grep -Fq 'versionName = "0.98"' "$APP_GRADLE"
+          grep -Fq 'versionName = "0.99"' "$APP_GRADLE"
 
-          grep -Fq 'FLYBRAIN V0.98' "$MAIN"
+          grep -Fq 'FLYBRAIN V0.99' "$MAIN"
 
           grep -Fq 'NEURONS = 16669' "$META"
 
-          grep -Fq 'FBC98' "$MAIN"
-
-          grep -Fq 'locomotorDrive' "$MAIN"
-
-          grep -Fq 'quietLocomotionTime' "$MAIN"
-
-          grep -Fq 'descendingRole' "$MAIN"
-
-          grep -Fq 'stableLocomotion' "$MAIN"
+          grep -Fq 'FBC99' "$MAIN"
 
           echo "========================================"
-          echo "PROYECTO V0.98 VALIDADO"
+          echo "PROYECTO V0.99 VALIDADO"
           echo "========================================"
 
-          echo "Version: 0.98"
-          echo "VersionCode: 98"
+          echo "Version: 0.99"
+          echo "VersionCode: 99"
           echo "Neuronas: 16.669"
-          echo "Formato binario: FBC98"
+          echo "Formato binario: FBC99"
           echo "MaleCNS: OK"
           echo "Functional bridge selection: OK"
           echo "VNC motor output: OK"
           echo "Descending roles: OK"
-          echo "Internal locomotor state: OK"
+          echo "Neural diagnostic layer: OK"
+          echo "Synaptic temporal traces: OK"
 
 
       # ============================================================
-      # 14. COMPILAR APK
+      # 15. COMPILAR APK
       # ============================================================
 
-      - name: Compilar APK V0.98
+      - name: Compilar APK V0.99
         working-directory: proyecto
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "COMPILANDO APK FLYBRAIN V0.98"
+          echo "COMPILANDO APK FLYBRAIN V0.99"
           echo "========================================"
 
           gradle --version
@@ -340,15 +363,15 @@ jobs:
 
 
       # ============================================================
-      # 15. VERIFICAR APK
+      # 16. VERIFICAR APK
       # ============================================================
 
-      - name: Verificar APK V0.98
+      - name: Verificar APK V0.99
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "VERIFICANDO APK V0.98"
+          echo "VERIFICANDO APK V0.99"
           echo "========================================"
 
           APK="proyecto/app/build/outputs/apk/debug/app-debug.apk"
@@ -360,18 +383,18 @@ jobs:
           ls -lh "$APK"
 
           echo "========================================"
-          echo "APK V0.98 VERIFICADO CORRECTAMENTE"
+          echo "APK V0.99 VERIFICADO CORRECTAMENTE"
           echo "========================================"
 
 
       # ============================================================
-      # 16. SUBIR APK COMO ARTIFACT
+      # 17. SUBIR APK COMO ARTIFACT
       # ============================================================
 
-      - name: Subir APK V0.98
+      - name: Subir APK V0.99
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V0.98-APK
+          name: FlyBrain-V0.99-APK
           path: proyecto/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
