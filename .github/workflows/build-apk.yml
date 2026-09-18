@@ -20,9 +20,9 @@ jobs:
           java-version: '17'
 
       - name: Preparar Android SDK
-        run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0'
 
       - name: Instalar Gradle
         uses: gradle/actions/setup-gradle@v4
