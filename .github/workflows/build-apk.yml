@@ -11,12 +11,10 @@ jobs:
 
     steps:
 
-      # 1. Descargar el repositorio
       - name: Descargar proyecto
         uses: actions/checkout@v4
 
 
-      # 2. Preparar Java 17
       - name: Preparar Java
         uses: actions/setup-java@v4
         with:
@@ -24,39 +22,31 @@ jobs:
           java-version: '17'
 
 
-      # 3. Preparar Android SDK
       - name: Preparar Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-35 build-tools;35.0.0'
 
 
-      # 4. Instalar Gradle
       - name: Instalar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
 
-      # 5. Descomprimir el proyecto V0.92
       - name: Descomprimir proyecto
         run: |
           set -e
 
+          rm -rf proyecto
           mkdir -p proyecto
-          mkdir -p proyecto_tmp
 
-          unzip -q FlyBrainV092_GitHub_Actions.zip -d proyecto_tmp
-
-          cp -r proyecto_tmp/FlyBrainV092_GitHub_Actions/. proyecto/
-
-          rm -rf proyecto_tmp
+          unzip -q FlyBrainV092_GitHub_Actions.zip -d proyecto
 
           echo "Contenido del proyecto:"
-          find proyecto -maxdepth 3 -type f | sort
+          find proyecto -maxdepth 4 -type f | sort
 
 
-      # 6. Verificar que realmente es V0.92
       - name: Verificar proyecto V0.92
         run: |
           set -e
@@ -76,14 +66,12 @@ jobs:
           echo "========================================"
 
 
-      # 7. Compilar APK
       - name: Compilar APK
         working-directory: proyecto
         run: |
           gradle :app:assembleDebug --stacktrace
 
 
-      # 8. Comprobar que el APK existe
       - name: Verificar APK
         run: |
           set -e
@@ -97,7 +85,6 @@ jobs:
           ls -lh proyecto/app/build/outputs/apk/debug/app-debug.apk
 
 
-      # 9. Guardar APK como Artifact
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
