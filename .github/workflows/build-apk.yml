@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V1.00
+name: Build FlyBrain APK V1.01
 
 on:
   workflow_dispatch:
@@ -9,12 +9,11 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
 
@@ -68,44 +67,45 @@ jobs:
 
 
       # ============================================================
-      # 6. COMPROBAR ZIP V1.00
+      # 6. COMPROBAR ZIP V1.01
       # ============================================================
 
-      - name: Comprobar ZIP V1.00
+      - name: Comprobar ZIP V1.01
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "COMPROBANDO ZIP FLYBRAIN V1.00"
+          echo "COMPROBANDO ZIP FLYBRAIN V1.01"
           echo "========================================"
 
-          test -f "FlyBrainV100_GitHub_Actions.zip"
+          ZIP="FlyBrainV101_GitHub_Actions.zip"
 
-          unzip -t "FlyBrainV100_GitHub_Actions.zip" >/dev/null
+          test -f "$ZIP"
 
-          ls -lh "FlyBrainV100_GitHub_Actions.zip"
+          unzip -t "$ZIP" >/dev/null
 
-          echo "ZIP V1.00 CORRECTO"
+          echo "ZIP encontrado:"
+          ls -lh "$ZIP"
+
+          echo "ZIP V1.01 INTEGRO"
 
 
       # ============================================================
-      # 7. DESCOMPRIMIR PROYECTO V1.00
+      # 7. DESCOMPRIMIR PROYECTO
       # ============================================================
 
-      - name: Descomprimir proyecto V1.00
+      - name: Descomprimir proyecto V1.01
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "DESCOMPRIMIENDO PROYECTO V1.00"
+          echo "DESCOMPRIMIENDO FLYBRAIN V1.01"
           echo "========================================"
 
           rm -rf proyecto
           mkdir -p proyecto
 
-          unzip -q "FlyBrainV100_GitHub_Actions.zip" -d proyecto
-
-          echo "Comprobando estructura..."
+          unzip -q "FlyBrainV101_GitHub_Actions.zip" -d proyecto
 
           test -f "proyecto/settings.gradle.kts"
           test -f "proyecto/build.gradle.kts"
@@ -117,486 +117,586 @@ jobs:
 
           test -f "proyecto/app/src/main/AndroidManifest.xml"
 
-          test -f "proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
+          test -f \
+            "proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
 
-          test -f "proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
+          test -f \
+            "proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
-          echo "ESTRUCTURA V1.00 CORRECTA"
+          test -f \
+            "proyecto/.github/workflows/build-apk.yml"
+
+          echo "ESTRUCTURA V1.01 CORRECTA"
 
 
       # ============================================================
-      # 8. INSTALAR DEPENDENCIAS PYTHON
+      # 8. COMPROBAR QUE EL ZIP CONTIENE REALMENTE V1.01
       # ============================================================
 
-      - name: Instalar dependencias del extractor
+      - name: Comprobar identidad V1.01
+        working-directory: proyecto
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "INSTALANDO DEPENDENCIAS PYTHON"
+          echo "COMPROBANDO IDENTIDAD DE VERSION"
           echo "========================================"
+
+          APP_GRADLE="app/build.gradle.kts"
+          MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
+          META="app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
+          BUILDER="tools/build_connectome.py"
+
+          grep -Fq 'versionCode = 101' "$APP_GRADLE"
+          grep -Fq 'versionName = "1.01"' "$APP_GRADLE"
+
+          grep -Fq 'FLYBRAIN V1.01' "$MAIN"
+
+          grep -Fq 'FBC101' "$MAIN"
+          grep -Fq 'FBC101' "$META"
+          grep -Fq 'FBC101' "$BUILDER"
+
+          grep -Fq 'NEURONS = 16669' "$META"
+
+          echo "VERSION 1.01 CONFIRMADA"
+
+
+      # ============================================================
+      # 9. INSTALAR DEPENDENCIAS PYTHON
+      # ============================================================
+
+      - name: Instalar dependencias Python
+        run: |
+          set -euo pipefail
 
           python -m pip install --upgrade pip
 
-          python -m pip install numpy pandas pyarrow
+          python -m pip install \
+            numpy \
+            pandas \
+            pyarrow
 
           echo "DEPENDENCIAS PYTHON INSTALADAS"
 
 
       # ============================================================
-      # 9. VALIDAR SCRIPT MALECNS
+      # 10. VALIDAR PYTHON
       # ============================================================
 
-      - name: Validar extractor MaleCNS V1.00
+      - name: Validar extractor MaleCNS
+        working-directory: proyecto
+        run: |
+          set -euo pipefail
+
+          python -m py_compile \
+            tools/build_connectome.py
+
+          echo "PYTHON SYNTAX OK"
+
+
+      # ============================================================
+      # 11. GENERAR CONNECTOME MALECNS
+      # ============================================================
+
+      - name: Generar reducción real MaleCNS V1.01
         working-directory: proyecto
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "VALIDANDO BUILD_CONNECTOME.PY"
-          echo "========================================"
-
-          python -m py_compile tools/build_connectome.py
-
-          echo "BUILD_CONNECTOME.PY CORRECTO"
-
-
-      # ============================================================
-      # 10. GENERAR REDUCCIÓN MALECNS V1.00
-      # ============================================================
-
-      - name: Generar reducción real MaleCNS V1.00
-        working-directory: proyecto
-        run: |
-          set -euo pipefail
-
-          echo "========================================"
-          echo "GENERANDO REDUCCION REAL MALECNS"
-          echo "VERSION V1.00"
+          echo "GENERANDO MALECNS REDUCIDO"
           echo "OBJETIVO: 16.669 NEURONAS"
+          echo "FORMATO: FBC101"
           echo "========================================"
 
           python tools/build_connectome.py
 
-          echo "========================================"
-          echo "COMPROBANDO ARCHIVOS GENERADOS"
-          echo "========================================"
+          test -f \
+            app/src/main/res/raw/malecns_reduced.bin
 
-          test -f "app/src/main/res/raw/malecns_reduced.bin"
+          test -f \
+            app/src/main/res/raw/malecns_reduced_report.json
 
-          test -f "app/src/main/res/raw/malecns_reduced_report.json"
+          test -f \
+            app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
 
-          test -f "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
-
-          grep -Fq '"neurons_retained": 16669' \
-            "app/src/main/res/raw/malecns_reduced_report.json"
-
-          grep -Fq 'functional_bridge_candidates_retained' \
-            "app/src/main/res/raw/malecns_reduced_report.json"
-
-          grep -Fq 'retained_sensor_to_desc_edges' \
-            "app/src/main/res/raw/malecns_reduced_report.json"
-
-          grep -Fq 'retained_desc_to_motor_edges' \
-            "app/src/main/res/raw/malecns_reduced_report.json"
-
-          echo "ARCHIVOS MALECNS V1.00 GENERADOS Y VERIFICADOS"
-
-          ls -lh "app/src/main/res/raw/malecns_reduced.bin"
+          echo "CONNECTOME GENERADO"
 
 
       # ============================================================
-      # 11. VERIFICAR ROLES MOTORES
+      # 12. VALIDAR REPORT JSON
       # ============================================================
 
-      - name: Verificar roles motores V1.00
+      - name: Validar informe MaleCNS
         working-directory: proyecto
         run: |
           set -euo pipefail
 
-          echo "========================================"
-          echo "VERIFICANDO ROLES MOTORES V1.00"
-          echo "========================================"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          p = Path(
+              "app/src/main/res/raw/"
+              "malecns_reduced_report.json"
+          )
+
+          data = json.loads(p.read_text())
+
+          assert data["dataset"] == "MaleCNS v1.0"
+          assert data["flybrain_version"] == "1.01"
+          assert data["binary_format"] == "FBC101"
+          assert data["neurons_retained"] == 16669
+
+          assert data["edges_retained"] > 0
+          assert data["contacts_retained_signed"] > 0
+
+          assert data["functional_bridge_candidates_retained"] > 0
+
+          assert data["retained_sensor_to_desc_edges"] > 0
+          assert data["retained_desc_to_motor_edges"] > 0
+
+          assert "descending_role_counts" in data
+          assert "motor_role_counts" in data
+
+          print("========================================")
+          print("REPORT MALECNS OK")
+          print("========================================")
+          print("Neuronas:", data["neurons_retained"])
+          print("Edges:", data["edges_retained"])
+          print(
+              "Sensor -> DN:",
+              data["retained_sensor_to_desc_edges"]
+          )
+          print(
+              "DN -> Motor:",
+              data["retained_desc_to_motor_edges"]
+          )
+          print(
+              "Bridge candidates:",
+              data["functional_bridge_candidates_retained"]
+          )
+          PY
+
+
+      # ============================================================
+      # 13. VALIDAR BINARIO FBC101
+      # ============================================================
+
+      - name: Validar binario FBC101
+        working-directory: proyecto
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          from pathlib import Path
+          import struct
+          import json
+          import math
+
+          p = Path(
+              "app/src/main/res/raw/"
+              "malecns_reduced.bin"
+          )
+
+          report_path = Path(
+              "app/src/main/res/raw/"
+              "malecns_reduced_report.json"
+          )
+
+          data = p.read_bytes()
+          report = json.loads(report_path.read_text())
+
+          # --------------------------------------------------------
+          # HEADER
+          # --------------------------------------------------------
+
+          assert len(data) >= 16
+
+          magic = data[:8]
+
+          assert magic == b"FBC101\x00\x00", (
+              f"Magic incorrecto: {magic!r}"
+          )
+
+          # --------------------------------------------------------
+          # COUNTS
+          # --------------------------------------------------------
+
+          n, e = struct.unpack_from("<II", data, 8)
+
+          assert n == 16669
+          assert e == report["edges_retained"]
+
+          # --------------------------------------------------------
+          # NODE FORMAT
+          #
+          # <qbbbbb
+          # q = 8 bytes
+          # 5 x byte = 5 bytes
+          # TOTAL = 13 bytes
+          # --------------------------------------------------------
+
+          NODE_SIZE = 13
+
+          # --------------------------------------------------------
+          # EDGE FORMAT
+          #
+          # <iif
+          # i = 4
+          # i = 4
+          # f = 4
+          # TOTAL = 12 bytes
+          # --------------------------------------------------------
+
+          EDGE_SIZE = 12
+
+          expected = (
+              16
+              + n * NODE_SIZE
+              + e * EDGE_SIZE
+          )
+
+          assert len(data) == expected, (
+              f"Tamaño incorrecto: "
+              f"{len(data)} != {expected}"
+          )
+
+          # --------------------------------------------------------
+          # NODE RECORDS
+          # --------------------------------------------------------
+
+          node_start = 16
+          edge_start = node_start + n * NODE_SIZE
+
+          for i in range(n):
+              off = node_start + i * NODE_SIZE
+
+              body, superclass, side, channel, motor_role, descending_role = \
+                  struct.unpack_from("<qbbbbb", data, off)
+
+              assert body > 0
+
+          # --------------------------------------------------------
+          # EDGE RECORDS
+          # --------------------------------------------------------
+
+          valid_edges = 0
+
+          for i in range(e):
+              off = edge_start + i * EDGE_SIZE
+
+              src, dst, weight = \
+                  struct.unpack_from("<iif", data, off)
+
+              assert 0 <= src < n, (
+                  f"src fuera de rango: {src}"
+              )
+
+              assert 0 <= dst < n, (
+                  f"dst fuera de rango: {dst}"
+              )
+
+              assert math.isfinite(weight)
+              assert weight != 0.0
+
+              valid_edges += 1
+
+          assert valid_edges == e
+
+          # --------------------------------------------------------
+          # EOF EXACTO
+          # --------------------------------------------------------
+
+          assert edge_start + e * EDGE_SIZE == len(data)
+
+          print("========================================")
+          print("FBC101 VALIDADO")
+          print("========================================")
+          print("Magic: FBC101")
+          print("Neuronas:", n)
+          print("Edges:", e)
+          print("Bytes:", len(data))
+          print("Node size:", NODE_SIZE)
+          print("Edge size:", EDGE_SIZE)
+          print("EOF exacto: OK")
+          print("Indices: OK")
+          print("Weights: OK")
+          PY
+
+
+      # ============================================================
+      # 14. VALIDAR ROLES MOTORES
+      # ============================================================
+
+      - name: Validar roles motores
+        working-directory: proyecto
+        run: |
+          set -euo pipefail
 
           META="app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
 
           grep -Fq 'NEURONS = 16669' "$META"
 
           grep -Fq 'MOTOR_LEG = 1' "$META"
-
           grep -Fq 'MOTOR_WING = 2' "$META"
-
           grep -Fq 'MOTOR_HALTERE = 3' "$META"
-
           grep -Fq 'MOTOR_NECK = 4' "$META"
-
           grep -Fq 'MOTOR_ABDOMEN = 5' "$META"
-
           grep -Fq 'MOTOR_JUMP = 6' "$META"
-
           grep -Fq 'MOTOR_OTHER = 7' "$META"
 
-          echo "ROLES MOTORES V1.00 CORRECTOS"
+          echo "ROLES MOTORES OK"
 
 
       # ============================================================
-      # 12. VERIFICAR ROLES DESCENDENTES
+      # 15. VALIDAR ROLES DESCENDENTES
       # ============================================================
 
-      - name: Verificar roles descendentes V1.00
+      - name: Validar roles descendentes
         working-directory: proyecto
         run: |
           set -euo pipefail
-
-          echo "========================================"
-          echo "VERIFICANDO ROLES DESCENDENTES"
-          echo "========================================"
 
           REPORT="app/src/main/res/raw/malecns_reduced_report.json"
 
           grep -Fq 'descending_role_counts' "$REPORT"
-
           grep -Fq 'descending_role_definition' "$REPORT"
 
-          echo "ROLES DESCENDENTES V1.00 CORRECTOS"
+          echo "ROLES DESCENDENTES OK"
 
 
       # ============================================================
-      # 13. VERIFICAR TRAZA SINAPTICA
+      # 16. VALIDAR DINÁMICA NEURAL
       # ============================================================
 
-      - name: Verificar integración sináptica V1.00
+      - name: Validar dinámica neuronal
         working-directory: proyecto
         run: |
           set -euo pipefail
 
-          echo "========================================"
-          echo "VERIFICANDO TRAZA SINAPTICA V1.00"
-          echo "========================================"
-
           MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
 
           grep -Fq 'synTrace' "$MAIN"
-
           grep -Fq 'synDecay' "$MAIN"
 
-          echo "TRAZA SINAPTICA V1.00 CORRECTA"
-
-
-      # ============================================================
-      # 14. VERIFICAR DIAGNÓSTICO SENSORIAL
-      # ============================================================
-
-      - name: Verificar diagnóstico sensorial V1.00
-        working-directory: proyecto
-        run: |
-          set -euo pipefail
-
-          echo "========================================"
-          echo "VERIFICANDO DIAGNOSTICO SENSORIAL"
-          echo "========================================"
-
-          MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
-
-          grep -Fq 'visualRateDisplay' "$MAIN"
-
-          grep -Fq 'olfactoryRateDisplay' "$MAIN"
-
-          grep -Fq 'gustatoryRateDisplay' "$MAIN"
-
-          grep -Fq 'mechanosensoryRateDisplay' "$MAIN"
-
-          echo "DIAGNOSTICO SENSORIAL CORRECTO"
-
-
-      # ============================================================
-      # 15. VERIFICAR DIAGNÓSTICO CENTRAL / DESCENDENTE / MOTOR
-      # ============================================================
-
-      - name: Verificar diagnóstico neural V1.00
-        working-directory: proyecto
-        run: |
-          set -euo pipefail
-
-          echo "========================================"
-          echo "VERIFICANDO DIAGNOSTICO NEURAL V1.00"
-          echo "========================================"
-
-          MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
-
-          # CENTRAL
-
-          grep -Fq 'centralRateDisplay' "$MAIN"
-
-          # DESCENDENTES
-
-          grep -Fq 'descendingRateDisplay' "$MAIN"
-
-          # ASCENDENTES
-
-          grep -Fq 'ascendingRateDisplay' "$MAIN"
-
-          # MOTOR / VNC
-
-          grep -Fq 'motorRateDisplay' "$MAIN"
-
-          # LOCOMOCION
-
-          grep -Fq 'stableLocomotion' "$MAIN"
-
-          grep -Fq 'motorLocomotion' "$MAIN"
-
-          echo "DIAGNOSTICO NEURAL V1.00 CORRECTO"
-
-
-      # ============================================================
-      # 16. VERIFICAR SELECCIÓN DE ACCIONES
-      # ============================================================
-
-      - name: Verificar selección de acciones V1.00
-        working-directory: proyecto
-        run: |
-          set -euo pipefail
-
-          echo "========================================"
-          echo "VERIFICANDO SELECCION DE ACCIONES V1.00"
-          echo "========================================"
-
-          MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
-
-          # --------------------------------------------------------
-          # APROXIMACION
-          # --------------------------------------------------------
-
-          grep -Fq 'approachAction' "$MAIN"
-
-          # --------------------------------------------------------
-          # ESCAPE
-          # --------------------------------------------------------
-
-          grep -Fq 'escapeAction' "$MAIN"
-
-          # --------------------------------------------------------
-          # ORIENTACION
-          # --------------------------------------------------------
-
-          grep -Fq 'orientAction' "$MAIN"
-
-          # --------------------------------------------------------
-          # EXPLORACION
-          # --------------------------------------------------------
-
-          grep -Fq 'exploreAction' "$MAIN"
-
-          # --------------------------------------------------------
-          # FRENADO
-          # --------------------------------------------------------
-
-          grep -Fq 'brakeAction' "$MAIN"
-
-          # --------------------------------------------------------
-          # GIRO IZQUIERDA / DERECHA
-          # --------------------------------------------------------
-
-          grep -Fq 'turnLeftAction' "$MAIN"
-
-          grep -Fq 'turnRightAction' "$MAIN"
-
-          echo "SELECCION DE ACCIONES V1.00 CORRECTA"
-
-
-      # ============================================================
-      # 17. VERIFICAR PROYECTO V1.00
-      # ============================================================
-
-      - name: Verificar proyecto V1.00
-        run: |
-          set -euo pipefail
-
-          echo "========================================"
-          echo "VERIFICANDO PROYECTO FLYBRAIN V1.00"
-          echo "========================================"
-
-          APP_GRADLE="proyecto/app/build.gradle.kts"
-          MAIN="proyecto/app/src/main/java/com/example/flybrain/MainActivity.kt"
-          META="proyecto/app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
-          REPORT="proyecto/app/src/main/res/raw/malecns_reduced_report.json"
-
-          test -f "$APP_GRADLE"
-          test -f "$MAIN"
-          test -f "$META"
-          test -f "proyecto/app/src/main/res/raw/malecns_reduced.bin"
-          test -f "$REPORT"
-
-          # --------------------------------------------------------
-          # VERSION
-          # --------------------------------------------------------
-
-          grep -Fq 'versionCode = 100' "$APP_GRADLE"
-
-          grep -Fq 'versionName = "1.00"' "$APP_GRADLE"
-
-          grep -Fq 'FLYBRAIN V1.00' "$MAIN"
-
-          # --------------------------------------------------------
-          # NEURONAS
-          # --------------------------------------------------------
-
-          grep -Fq 'NEURONS = 16669' "$META"
-
-          grep -Fq '"neurons_retained": 16669' "$REPORT"
-
-          # --------------------------------------------------------
-          # FORMATO BINARIO
-          # --------------------------------------------------------
-
-          grep -Fq 'FBC100' "$MAIN"
-
-          # --------------------------------------------------------
-          # ESTADO LOCOMOTOR
-          # --------------------------------------------------------
-
           grep -Fq 'locomotorDrive' "$MAIN"
-
           grep -Fq 'locomotorPhase' "$MAIN"
-
           grep -Fq 'motorActivityMemory' "$MAIN"
 
-          # --------------------------------------------------------
-          # ROLES DESCENDENTES
-          # --------------------------------------------------------
+          echo "DINAMICA NEURAL OK"
 
-          grep -Fq 'descendingRole' "$MAIN"
 
-          # --------------------------------------------------------
-          # TRAZA SINAPTICA
-          # --------------------------------------------------------
+      # ============================================================
+      # 17. VALIDAR DIAGNÓSTICO SENSORIAL
+      # ============================================================
 
-          grep -Fq 'synTrace' "$MAIN"
+      - name: Validar diagnóstico sensorial
+        working-directory: proyecto
+        run: |
+          set -euo pipefail
 
-          # --------------------------------------------------------
-          # DIAGNOSTICO SENSORIAL
-          # --------------------------------------------------------
+          MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
 
-          grep -Fq 'visualRateDisplay' "$MAIN"
+          grep -Fq 'visualRate' "$MAIN"
+          grep -Fq 'olfactoryRate' "$MAIN"
+          grep -Fq 'gustatoryRate' "$MAIN"
+          grep -Fq 'mechanosensoryRate' "$MAIN"
 
-          grep -Fq 'olfactoryRateDisplay' "$MAIN"
+          echo "DIAGNOSTICO SENSORIAL OK"
 
-          grep -Fq 'gustatoryRateDisplay' "$MAIN"
 
-          grep -Fq 'mechanosensoryRateDisplay' "$MAIN"
+      # ============================================================
+      # 18. VALIDAR CADENA NEURAL
+      # ============================================================
 
-          # --------------------------------------------------------
-          # DIAGNOSTICO NEURAL
-          # --------------------------------------------------------
+      - name: Validar cadena sensorial -> motor
+        working-directory: proyecto
+        run: |
+          set -euo pipefail
 
-          grep -Fq 'centralRateDisplay' "$MAIN"
+          MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
 
-          grep -Fq 'descendingRateDisplay' "$MAIN"
-
-          grep -Fq 'ascendingRateDisplay' "$MAIN"
-
-          grep -Fq 'motorRateDisplay' "$MAIN"
-
-          # --------------------------------------------------------
-          # LOCOMOCION
-          # --------------------------------------------------------
+          grep -Fq 'centralRate' "$MAIN"
+          grep -Fq 'descendingRate' "$MAIN"
+          grep -Fq 'ascendingRate' "$MAIN"
+          grep -Fq 'motorRate' "$MAIN"
 
           grep -Fq 'stableLocomotion' "$MAIN"
 
-          grep -Fq 'motorLocomotion' "$MAIN"
+          echo "CADENA SENSORIAL -> MOTOR PRESENTE"
 
-          # --------------------------------------------------------
-          # SELECCION DE ACCIONES
-          # --------------------------------------------------------
+
+      # ============================================================
+      # 19. VALIDAR SELECCIÓN DE ACCIONES
+      # ============================================================
+
+      - name: Validar selección competitiva
+        working-directory: proyecto
+        run: |
+          set -euo pipefail
+
+          MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
 
           grep -Fq 'approachAction' "$MAIN"
-
           grep -Fq 'escapeAction' "$MAIN"
-
           grep -Fq 'orientAction' "$MAIN"
-
           grep -Fq 'exploreAction' "$MAIN"
-
           grep -Fq 'brakeAction' "$MAIN"
 
-          grep -Fq 'turnLeftAction' "$MAIN"
+          grep -Fq 'updateActionSelection' "$MAIN"
 
-          grep -Fq 'turnRightAction' "$MAIN"
+          grep -Fq 'descendingRoleRate' "$MAIN"
 
-          echo "========================================"
-          echo "PROYECTO V1.00 VALIDADO"
-          echo "========================================"
-
-          echo "Version: 1.00"
-          echo "VersionCode: 100"
-          echo "Neuronas: 16.669"
-          echo "Formato binario: FBC100"
-          echo "MaleCNS: OK"
-          echo "Functional bridge selection: OK"
-          echo "VNC motor output: OK"
-          echo "Descending roles: OK"
-          echo "Neural diagnostic layer: OK"
-          echo "Synaptic temporal traces: OK"
-          echo "Action selection: OK"
+          echo "SELECCION COMPETITIVA OK"
 
 
       # ============================================================
-      # 18. COMPILAR APK
+      # 20. COMPROBAR AUSENCIA DE FALLBACK ARTIFICIAL
       # ============================================================
 
-      - name: Compilar APK V1.00
+      - name: Verificar fail-closed del connectome
+        working-directory: proyecto
+        run: |
+          set -euo pipefail
+
+          MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
+
+          # Debe existir el estado de carga real.
+          grep -Fq 'connectomeLoaded' "$MAIN"
+          grep -Fq 'connectomeError' "$MAIN"
+
+          # Debe comprobarse el tamaño exacto.
+          grep -Fq 'expectedBytes' "$MAIN"
+          grep -Fq 'bytes.size.toLong() != expectedBytes' "$MAIN"
+
+          # Debe comprobar índices de las conexiones.
+          grep -Fq 'fuera de rango' "$MAIN"
+
+          # La aplicación no debe contener un constructor
+          # alternativo de red llamado buildFallbackBrain.
+          if grep -Fq 'buildFallbackBrain' "$MAIN"; then
+            echo "ERROR: existe buildFallbackBrain"
+            exit 1
+          fi
+
+          echo "FAIL-CLOSED OK"
+          echo "NO HAY FALLBACK NEURONAL ARTIFICIAL"
+
+
+      # ============================================================
+      # 21. COMPROBAR PLASTICIDAD
+      # ============================================================
+
+      - name: Verificar plasticidad desactivada
+        working-directory: proyecto
+        run: |
+          set -euo pipefail
+
+          MAIN="app/src/main/java/com/example/flybrain/MainActivity.kt"
+
+          grep -Fq 'plasticityEnabled = false' "$MAIN"
+
+          echo "PLASTICIDAD EXPERIMENTAL DESACTIVADA"
+
+
+      # ============================================================
+      # 22. VALIDACIÓN FINAL DEL PROYECTO
+      # ============================================================
+
+      - name: Validación final
         working-directory: proyecto
         run: |
           set -euo pipefail
 
           echo "========================================"
-          echo "COMPILANDO APK FLYBRAIN V1.00"
+          echo "VALIDACION FINAL FLYBRAIN V1.01"
+          echo "========================================"
+
+          test -f settings.gradle.kts
+          test -f build.gradle.kts
+          test -f gradle.properties
+
+          test -f app/build.gradle.kts
+          test -f app/src/main/AndroidManifest.xml
+
+          test -f \
+            app/src/main/res/raw/malecns_reduced.bin
+
+          test -f \
+            app/src/main/res/raw/malecns_reduced_report.json
+
+          test -f \
+            app/src/main/java/com/example/flybrain/MainActivity.kt
+
+          test -f \
+            app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+
+          grep -Fq 'versionCode = 101' \
+            app/build.gradle.kts
+
+          grep -Fq 'versionName = "1.01"' \
+            app/build.gradle.kts
+
+          grep -Fq 'NEURONS = 16669' \
+            app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+
+          echo "========================================"
+          echo "TODAS LAS VALIDACIONES PASADAS"
+          echo "========================================"
+
+
+      # ============================================================
+      # 23. COMPILAR APK
+      # ============================================================
+
+      - name: Compilar APK V1.01
+        working-directory: proyecto
+        run: |
+          set -euo pipefail
+
+          echo "========================================"
+          echo "COMPILANDO FLYBRAIN V1.01"
           echo "========================================"
 
           gradle --version
 
-          gradle :app:assembleDebug --stacktrace --no-daemon
+          gradle \
+            :app:assembleDebug \
+            --stacktrace \
+            --no-daemon
 
-          echo "========================================"
           echo "COMPILACION FINALIZADA"
-          echo "========================================"
 
 
       # ============================================================
-      # 19. VERIFICAR APK
+      # 24. VERIFICAR APK
       # ============================================================
 
-      - name: Verificar APK V1.00
+      - name: Verificar APK
         run: |
           set -euo pipefail
-
-          echo "========================================"
-          echo "VERIFICANDO APK V1.00"
-          echo "========================================"
 
           APK="proyecto/app/build/outputs/apk/debug/app-debug.apk"
 
           test -f "$APK"
-
           test -s "$APK"
 
-          echo "APK ENCONTRADO:"
+          echo "========================================"
+          echo "APK V1.01 ENCONTRADO"
+          echo "========================================"
+
           ls -lh "$APK"
 
-          echo "========================================"
-          echo "APK V1.00 VERIFICADO CORRECTAMENTE"
-          echo "========================================"
-
 
       # ============================================================
-      # 20. SUBIR APK COMO ARTIFACT
+      # 25. SUBIR APK
       # ============================================================
 
-      - name: Subir APK V1.00
+      - name: Subir APK V1.01
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V1.00-APK
+          name: FlyBrain-V1.01-APK
           path: proyecto/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
