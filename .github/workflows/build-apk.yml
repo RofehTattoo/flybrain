@@ -32,7 +32,10 @@ jobs:
       - name: Descomprimir proyecto
         run: |
           mkdir proyecto
-          unzip -q FlyBrainV05_GitHub_Actions.zip -d proyecto
+          mkdir proyecto_tmp
+          unzip -q FlyBrainV05_GitHub_Actions.zip -d proyecto_tmp
+          cp -r proyecto_tmp/FlyBrainV05_GitHub_Actions/. proyecto/
+          rm -rf proyecto_tmp
 
       - name: Verificar proyecto
         run: |
