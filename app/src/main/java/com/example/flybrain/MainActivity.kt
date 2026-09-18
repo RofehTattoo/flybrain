@@ -630,7 +630,7 @@ class MainActivity : Activity() {
                     pool.setOnLoadCompleteListener { _, sampleId, status ->
                         if (sampleId == buzzSoundId) buzzLoaded = status == 0
                     }
-                    buzzSoundId = pool.load(resources, R.raw.fly_buzz, 1)
+                    buzzSoundId = pool.load(this@MainActivity, R.raw.fly_buzz, 1)
                 }
         }
 
