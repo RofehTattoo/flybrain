@@ -308,12 +308,10 @@ class MainActivity : Activity() {
         private var dangerDirectionalBias = 0f
         private var dangerLoom = 0f
 
-        // V1.08: REST <-> LOCOMOTION is an endogenous homeostatic state, not a
-        // timer and not a direct body command. Activity builds a bounded rest
-        // pressure; measured halt-related DN activity can reinforce the transition;
-        // rest pressure then decays and a weak internal wake drive allows spontaneous
-        // re-entry into locomotion without an external stimulus. The body still moves
-        // only from measured VNC motor neurons.
+        // V1.09: REST <-> LOCOMOTION remains an endogenous homeostatic state.
+        // REST also contains stochastic micro-pauses: short episodes of strong
+        // motor-neuron inhibition with variable onset, duration and recovery.
+        // Body movement still comes only from measured VNC motor neurons.
         private var explorationState = 0f
         private var explorationPhase = 0f
         private var motorActivityMemory = 0f
@@ -321,6 +319,10 @@ class MainActivity : Activity() {
         private var wakePressure = 0f
         private var restState = false
         private var restStateBlend = 0f
+        private var restMicroPause = false
+        private var restMicroPauseTimer = 0f
+        private var restMicroPauseCooldown = 0f
+        private var restMicroPauseDuration = 0f
         private var haltEvidenceDisplay = 0f
         private var previousFoodDrive = 0f
         private var previousLightDrive = 0f
@@ -335,7 +337,7 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.08\n")
+            append("FLYBRAIN V1.09\n")
             append("16.669 neuronas · MaleCNS v1.0\n")
             append("Comidas $foodHits · Escapes $escapeEvents · Saciedad ${(satiety * 100).toInt()}% · Memoria ${(memoryTrace * 100).toInt()}% · FPS ${fps.toInt()}\n")
             append("Estado ${if (restState) "REPOSO" else "LOCOMOCIÓN"} · Presión ${(restPressure * 100).toInt()}%")
@@ -487,6 +489,10 @@ class MainActivity : Activity() {
             wakePressure = 0f
             restState = false
             restStateBlend = 0f
+            restMicroPause = false
+            restMicroPauseTimer = 0f
+            restMicroPauseCooldown = 0f
+            restMicroPauseDuration = 0f
             haltEvidenceDisplay = 0f
             previousFoodDrive = 0f
             previousLightDrive = 0f
@@ -937,6 +943,10 @@ class MainActivity : Activity() {
                 if (restPressure > .72f && threatDemand < .38f && (haltEvidence > .004f || motorActivityMemory > .035f || feedingDemand > .45f)) {
                     restState = true
                     wakePressure = .05f
+                    restMicroPause = false
+                    restMicroPauseTimer = 0f
+                    restMicroPauseCooldown = 2.5f + rng.nextFloat() * 3.5f
+                    restMicroPauseDuration = 0f
                 }
             } else {
                 // Once resting, the homeostat discharges gradually. The discharge is
@@ -954,6 +964,34 @@ class MainActivity : Activity() {
             }
             val restTarget = if (restState) 1f else 0f
             restStateBlend += (restTarget - restStateBlend) * (1f - exp((-dt / .35f).toDouble()).toFloat())
+
+            // V1.09: behavioral micro-pauses inside REST. The timing is stochastic,
+            // not periodic: the fly can move slowly, become immobile briefly, then
+            // resume. The short cooldown bounds the pause-free interval so REST cannot
+            // look like 20-30 minutes of uninterrupted walking.
+            if (!restState) {
+                restMicroPause = false
+                restMicroPauseTimer = 0f
+                restMicroPauseCooldown = 0f
+                restMicroPauseDuration = 0f
+            } else if (restMicroPause) {
+                restMicroPauseTimer -= dt
+                if (restMicroPauseTimer <= 0f) {
+                    restMicroPause = false
+                    restMicroPauseCooldown = 1.8f + rng.nextFloat() * 4.8f
+                    restMicroPauseDuration = 0f
+                }
+            } else {
+                restMicroPauseCooldown -= dt
+                if (restMicroPauseCooldown <= 0f) {
+                    val pauseChancePerSecond = 0.11f + 0.12f * restStateBlend
+                    if (rng.nextFloat() < (pauseChancePerSecond * dt).coerceIn(0f, .25f)) {
+                        restMicroPause = true
+                        restMicroPauseDuration = .8f + rng.nextFloat() * 2.4f
+                        restMicroPauseTimer = restMicroPauseDuration
+                    }
+                }
+            }
 
             previousFoodDrive = foodDrive
             previousLightDrive = lightDrive
@@ -1017,6 +1055,14 @@ class MainActivity : Activity() {
                     locomotorBias * dt * 18f - restInhibition + wakeDrive
                 } else 0f
 
+                // V1.09: express a micro-pause upstream at the VNC motor-neuron
+                // level instead of freezing body coordinates. Movement therefore
+                // remains causally tied to measured motor activity. A small residual
+                // drive is intentionally left so occasional tiny twitches are possible.
+                val motorPauseInhibition = if (isMotor && restMicroPause) {
+                    (.045f + .085f * restStateBlend) * dt * 18f
+                } else 0f
+
                 val tonic = when {
                     isDesc -> .0075f
                     i in ASC_START until ASC_END -> .0020f
@@ -1039,7 +1085,7 @@ class MainActivity : Activity() {
 
                 val synCurrent = (syn * synGain).coerceIn(-.55f, .55f)
                 v[i] += ((V_REST - v[i]) * 5.8f - adapt[i]) * dt + synCurrent +
-                    tonic * dt * 10f + centralNoise + centralStateDrive + stateDrive
+                    tonic * dt * 10f + centralNoise + centralStateDrive + stateDrive - motorPauseInhibition
                 fired[i] = v[i] >= V_THRESHOLD
 
                 if (fired[i]) {

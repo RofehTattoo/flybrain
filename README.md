@@ -1,4 +1,4 @@
-# FlyBrain V1.08
+# FlyBrain V1.09
 
 ## Objetivo
 V1.07 mantiene exactamente 16.669 neuronas del MaleCNS v1.0 y da prioridad explícita a la preservación de rutas funcionales medidas en el conectoma reducido. La selección ya no depende únicamente de grado/superclase: se conservan preferentemente neuronas intermedias que participan en rutas de dos saltos `sensor -> célula -> DN` y `DN -> célula -> MN`, separando familias de avance, orientación/giro, escape y sensorimotora general.
@@ -91,7 +91,7 @@ La interfaz se simplifica deliberadamente para que la simulación sea lo primero
 - Se incluye un zumbido de mosca generado como recurso local. El audio se activa suavemente durante el movimiento o una interacción sensorial y se detiene en reposo.
 - La animación y el audio son capas de presentación: no modifican la dinámica neuronal ni crean órdenes motoras.
 
-La versión Android es `1.07` / `versionCode 106`; el formato binario interno continúa siendo `FBC102` para no romper la compatibilidad del lector existente.
+La versión Android de esta entrega es `1.09` / `versionCode 109`; el formato binario interno continúa siendo `FBC102` para no romper la compatibilidad del lector existente.
 
 ## V1.07 — visualización neuronal y estímulo de comida
 
@@ -121,3 +121,19 @@ La modificación elimina ese oscilador locomotor forzado y lo sustituye por un e
 Esto no se presenta como un modelo de sueño. Es una primera aproximación a las transiciones espontáneas REST ↔ LOCOMOTION. La literatura experimental muestra que Drosophila presenta episodios espontáneos de marcha y reposo y que existen circuitos específicos de halting que pueden inhibir comandos descendentes de marcha o frenar activamente la marcha en el VNC. Sapkal et al. (Nature 2024) describen los mecanismos walk-OFF y brake; Aimon et al. (eLife 2023) muestran cambios globales de actividad cerebral asociados a los episodios espontáneos de marcha.
 
 La presión de reposo es una abstracción homeostática del modelo, no una neurona nueva ni una conexión añadida. No escribe directamente posición, velocidad, rumbo ni actividad motora.
+
+
+## V1.09 — micro-pausas espontáneas durante REPOSO
+
+V1.09 conserva la lógica homeostática de V1.08 y los umbrales de transición observados en las pruebas (aprox. 70 % para entrar en REPOSO y 22 % para salir). Se añade una segunda escala temporal dentro de REPOSO: micro-pausas conductuales estocásticas.
+
+- REPOSO no significa inmovilidad permanente.
+- Las pausas duran aproximadamente 0,8–3,2 s.
+- La primera pausa se programa para aparecer tras unos 2,5–6 s de REPOSO y las siguientes tienen intervalos variables de aproximadamente 1,8–6,6 s antes de que pueda comenzar otra pausa.
+- El inicio se decide probabilísticamente y no sigue un patrón periódico fijo.
+- La inhibición se aplica en las neuronas motoras VNC durante la micro-pausa, en lugar de congelar directamente la posición. El movimiento sigue procediendo de actividad motora medida.
+- Se deja actividad residual para permitir pequeños tics/movimientos ocasionales.
+
+### Prueba recomendada
+
+Dejar la simulación 5–10 minutos sin estímulos. Observar si durante REPOSO aparecen pausas breves e irregulares, si no hay bloques largos de movimiento continuo y si la mosca vuelve a locomoción al bajar la presión aproximadamente al 22 %.
