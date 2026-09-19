@@ -131,13 +131,34 @@ class MainActivity : Activity() {
         // body-to-body connections from the source connectome.
         private val N = GeneratedConnectomeMeta.NEURONS
 
-        // V1.05: gain calibration for the existing connectome only. These values
+        // V1.06: gain calibration for the existing connectome only. These values
         // do not add neurons or edges; they control how strongly measured spikes
         // move the existing LIF membrane potentials.
         private val SENSORY_VIS_GAIN = 0.70f
         private val SENSORY_OLF_GAIN = 1.00f
         private val SENSORY_GUST_GAIN = 0.85f
         private val SENSORY_MECH_GAIN = 0.70f
+
+        // V1.06: bounded homeostatic gain calibration. The controller changes
+        // only the efficacy of the EXISTING synapses; topology, neuron count and
+        // edge weights in the connectome file are untouched. It keeps internal
+        // populations in a sparse, non-saturated firing regime while a stimulus
+        // is present, instead of choosing a larger fixed gain blindly.
+        private var gainOther = 3.60f
+        private var gainAsc = 3.40f
+        private var gainDesc = 4.00f
+        private var gainMotor = 3.60f
+        private var gainCalibrationClock = 0f
+        private var gainCalibrationActive = false
+
+        private val GAIN_OTHER_MIN = 2.00f
+        private val GAIN_OTHER_MAX = 4.80f
+        private val GAIN_ASC_MIN = 2.00f
+        private val GAIN_ASC_MAX = 4.50f
+        private val GAIN_DESC_MIN = 2.20f
+        private val GAIN_DESC_MAX = 5.20f
+        private val GAIN_MOTOR_MIN = 2.00f
+        private val GAIN_MOTOR_MAX = 4.80f
         private val V_REST = -0.72f
         private val V_THRESHOLD = -0.50f
         private val V_RESET = -0.84f
@@ -173,7 +194,7 @@ class MainActivity : Activity() {
         private val routeTurn = FloatArray(N)
         private val routeEscape = FloatArray(N)
         private val refractory = FloatArray(N)
-        // V1.05: short-lived chemical synaptic trace (~45 ms), unchanged from V1.04.
+        // V1.06: short-lived chemical synaptic trace (~45 ms), unchanged from V1.04.
         private val synTrace = FloatArray(N)
 
         private val incoming = Array(N) { IntArray(0) }
@@ -194,6 +215,8 @@ class MainActivity : Activity() {
         private var flyY = .55f
         private var heading = -.15f
         private var flySpeed = 0f
+        private var flightFactor = 0f
+        private var flightPhase = 0f
 
         private var foodX = .76f
         private var foodY = .35f
@@ -303,7 +326,7 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.05\n")
+            append("FLYBRAIN V1.06\n")
             append("16.669 neuronas · MaleCNS v1.0\n")
             append("Comidas $foodHits · Escapes $escapeEvents · Saciedad ${(satiety * 100).toInt()}% · Memoria ${(memoryTrace * 100).toInt()}% · FPS ${fps.toInt()}")
         }
@@ -384,6 +407,15 @@ class MainActivity : Activity() {
             flyY = .55f
             heading = -.15f
             flySpeed = 0f
+            flightFactor = 0f
+            flightPhase = 0f
+            jumpActivityCacheValue = 0f
+            gainOther = 3.60f
+            gainAsc = 3.40f
+            gainDesc = 4.00f
+            gainMotor = 3.60f
+            gainCalibrationClock = 0f
+            gainCalibrationActive = false
             foodX = .76f
             foodY = .35f
             lightX = .72f
@@ -805,6 +837,40 @@ class MainActivity : Activity() {
             }
         }
 
+        private fun calibrateSynapticGain(dt: Float, sensoryArousal: Float) {
+            // Calibrate slowly (250 ms) and only while the environment is actually
+            // stimulating the sensory populations. With no stimulus, zero firing is
+            // a legitimate baseline in connectome LIF models and must not cause gain
+            // to ramp upward indefinitely.
+            gainCalibrationClock += dt
+            if (gainCalibrationClock < .25f) return
+            gainCalibrationClock = 0f
+
+            val active = sensoryArousal > .055f || foodOn || lightOn || dangerOn
+            gainCalibrationActive = active
+            if (!active) return
+
+            val otherRate = populationRate(OTHER_START, OTHER_END)
+            val ascRate = populationRate(ASC_START, ASC_END)
+            val descRate = populationRate(DESC_START, DESC_END)
+            val motorRate = populationRate(MOTOR_START, MOTOR_END)
+
+            // Target windows are deliberately broad: they define a sparse regime,
+            // not a claim that every fly neuron has one universal firing rate.
+            gainOther = adaptGain(gainOther, otherRate, .004f, .035f, GAIN_OTHER_MIN, GAIN_OTHER_MAX)
+            gainAsc = adaptGain(gainAsc, ascRate, .003f, .030f, GAIN_ASC_MIN, GAIN_ASC_MAX)
+            gainDesc = adaptGain(gainDesc, descRate, .004f, .045f, GAIN_DESC_MIN, GAIN_DESC_MAX)
+            gainMotor = adaptGain(gainMotor, motorRate, .002f, .035f, GAIN_MOTOR_MIN, GAIN_MOTOR_MAX)
+        }
+
+        private fun adaptGain(current: Float, rate: Float, low: Float, high: Float, minGain: Float, maxGain: Float): Float {
+            var g = current
+            // Small multiplicative steps prevent frame-to-frame oscillation.
+            if (rate > high) g *= .94f
+            else if (rate < low) g *= 1.045f
+            return g.coerceIn(minGain, maxGain)
+        }
+
         private fun stepBrain(dt: Float) {
             for (i in 0 until N) prevFired[i] = fired[i]
 
@@ -829,6 +895,7 @@ class MainActivity : Activity() {
 
             // Sensory signals modulate arousal; they do not specify an action.
             val sensoryArousal = max(foodDrive, max(lightDrive, dangerDrive))
+            calibrateSynapticGain(dt, sensoryArousal)
             val targetExploration = (.48f + .18f * sensoryNovelty + .08f * sensoryArousal).coerceIn(.20f, .90f)
             explorationState += dt * (.20f * (targetExploration - explorationState))
             explorationState = explorationState.coerceIn(.05f, .95f)
@@ -895,17 +962,17 @@ class MainActivity : Activity() {
                     else -> 0f
                 }
 
-                // V1.05: amplify transmission through the EXISTING retained
+                // V1.06: amplify transmission through the EXISTING retained
                 // connectome. The topology and weights are untouched; this is a
                 // single model-gain calibration so sparse reduced paths can cross
                 // the LIF threshold instead of dying after the first synapse.
                 // The gain is strongest at DN/VNC stages where the reduction is
                 // sparsest, while the current ceiling prevents runaway saturation.
                 val synGain = when {
-                    isMotor -> 5.00f
-                    isDesc -> 6.00f
-                    i in ASC_START until ASC_END -> 4.50f
-                    else -> 5.00f
+                    isMotor -> gainMotor
+                    isDesc -> gainDesc
+                    i in ASC_START until ASC_END -> gainAsc
+                    else -> gainOther
                 }
 
                 val synCurrent = (syn * synGain).coerceIn(-.55f, .55f)
@@ -1040,7 +1107,9 @@ class MainActivity : Activity() {
 
         // Cached proxy is updated from actual motor activity in driveBody.
         private var legActivityCache = 0f
+        private var jumpActivityCacheValue = 0f
         private fun legActivityProxy(): Float = legActivityCache
+        private fun jumpActivityCache(): Float = jumpActivityCacheValue
 
         private fun learn(reward: Float, dt: Float) {
             val r = reward.coerceIn(-1f, 1f)
@@ -1130,19 +1199,27 @@ class MainActivity : Activity() {
                 baselineTurnBias *= exp((-dt / 5.0f).toDouble()).toFloat()
             }
             val turn = rawTurn - baselineTurnBias * .72f
-            val jumpImpulse = jumpActivity * .005f
-            // Nonlinear motor recruitment: sparse real MN firing can still
-            // produce a small measurable body force, while the source remains
-            // exclusively the measured VNC motor population.
+            // V1.06 movement: translation is still generated exclusively from
+            // measured VNC motor neurons. Leg MN activity supplies walking force;
+            // wing/jump MN activity adds flight thrust. No stimulus or action score
+            // writes position directly.
             val recruitedLeg = sqrt(legActivity.coerceAtLeast(0f))
-            // V1.04: speed remains an output of measured motor neurons. The
-            // nonlinear recruitment is softened so low firing does not become
-            // almost-maximal locomotion in the UI/body.
-            val cmdSpeed = (recruitedLeg * .008f + jumpImpulse).coerceIn(-.002f, .012f)
-            heading += turn * dt * 3.0f
-            flySpeed = .80f * flySpeed + .20f * cmdSpeed
+            val flightMotor = (wingActivity * .78f + jumpActivity * .22f).coerceIn(0f, 1f)
+            flightFactor += (flightMotor - flightFactor) * (1f - exp((-dt / .10f).toDouble()).toFloat())
+            val jumpImpulse = jumpActivity * .006f
+            val cmdSpeed = (recruitedLeg * .012f + flightMotor * .010f + jumpImpulse).coerceIn(-.002f, .018f)
+            heading += turn * dt * 3.6f
+            flySpeed = .84f * flySpeed + .16f * cmdSpeed
             flyX += cos(heading) * flySpeed * dt * 60f
             flyY += sin(heading) * flySpeed * dt * 60f
+
+            // Wing-driven flight adds only a small vertical lift/bob. It is gated
+            // by measured wing/jump motor activity, so ordinary walking does not
+            // magically become flight.
+            flightPhase += dt * (10f + 22f * flightFactor)
+            if (flightFactor > .05f) {
+                flyY += sin(flightPhase * (Math.PI.toFloat() * 2f)) * .00065f * flightFactor * dt * 60f
+            }
 
             if (flyX < .055f || flyX > .945f) {
                 heading = Math.PI.toFloat() - heading
@@ -1188,6 +1265,7 @@ class MainActivity : Activity() {
             centralRateDisplay = .82f * centralRateDisplay + .18f * centralRate
             motorRateDisplay = .82f * motorRateDisplay + .18f * motorRate
             legActivityCache = legActivity
+            jumpActivityCacheValue = jumpActivity
 
             sensoryDisplay = .86f * sensoryDisplay + .14f * ((visualRate + olfactoryRate + gustatoryRate + mechanosensoryRate) * .25f)
             centralDisplay = .88f * centralDisplay + .12f * ((centralRate + descendingRate + ascendingRate) / 3f)
@@ -1220,7 +1298,7 @@ class MainActivity : Activity() {
 
             val motorLocomotion = (motorRate * 2.4f + legActivity * .35f + neckActivity * .08f + jumpActivity * .04f).coerceIn(0f, 1f)
             stableLocomotion = (.88f * stableLocomotion + .12f * motorLocomotion).coerceIn(0f, 1f)
-            val wingVisualIntensity = max(wingActivityCache, (abs(flySpeed) / .010f).coerceIn(0f, 1f))
+            val wingVisualIntensity = max(wingActivityCache, jumpActivityCache())
             wingBeatPhase += dt * (8f + 11f * wingVisualIntensity) * (Math.PI.toFloat() * 2f)
             updateBuzzSound()
             info.text = infoText()
@@ -1525,7 +1603,7 @@ class MainActivity : Activity() {
 
             // Animated wings: the beat is a visual consequence of measured wing
             // activity and/or movement. It never feeds back into the neural model.
-            val wingVisual = max(wingActivityCache, (abs(flySpeed) / .010f).coerceIn(0f, 1f))
+            val wingVisual = max(wingActivityCache, jumpActivityCache())
             val wingBeat = sin(wingBeatPhase) * (3f + 12f * wingVisual)
             val wingAlpha = (55f + 35f * wingVisual).toInt().coerceIn(45, 95)
 

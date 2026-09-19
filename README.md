@@ -1,7 +1,7 @@
-# FlyBrain V1.05
+# FlyBrain V1.06
 
 ## Objetivo
-V1.05 mantiene exactamente 16.669 neuronas del MaleCNS v1.0 y da prioridad explícita a la preservación de rutas funcionales medidas en el conectoma reducido. La selección ya no depende únicamente de grado/superclase: se conservan preferentemente neuronas intermedias que participan en rutas de dos saltos `sensor -> célula -> DN` y `DN -> célula -> MN`, separando familias de avance, orientación/giro, escape y sensorimotora general.
+V1.06 mantiene exactamente 16.669 neuronas del MaleCNS v1.0 y da prioridad explícita a la preservación de rutas funcionales medidas en el conectoma reducido. La selección ya no depende únicamente de grado/superclase: se conservan preferentemente neuronas intermedias que participan en rutas de dos saltos `sensor -> célula -> DN` y `DN -> célula -> MN`, separando familias de avance, orientación/giro, escape y sensorimotora general.
 
 El movimiento del cuerpo virtual sigue procediendo exclusivamente de actividad medida de neuronas motoras VNC retenidas. Las etiquetas de DN/MN y las puntuaciones de ruta son metadatos derivados del conectoma y no crean conexiones artificiales.
 
@@ -11,7 +11,16 @@ https://male-cns.janelia.org/download/
 
 Berg et al., *Cell* (2026), “Sexual dimorphism in the complete connectome of the Drosophila male central nervous system”, DOI 10.1016/j.cell.2026.08.015.
 
-## Arquitectura V1.05
+## V1.06 — calibración de ganancia y movimiento
+
+V1.06 no añade neuronas ni conexiones. Se centra exclusivamente en dos aspectos:
+
+1. **Ganancia sináptica calibrada:** la eficacia de las conexiones ya retenidas se ajusta lentamente dentro de límites acotados, usando la actividad medida de las poblaciones OTHER/central, ASC, DN y VNC-motor. La calibración solo actúa mientras existe estimulación sensorial; el reposo no dispara una subida indefinida de ganancia. El objetivo es mantener actividad escasa y evitar tanto la red muerta como la saturación.
+2. **Movimiento derivado del VNC:** la traslación continúa procediendo únicamente de neuronas motoras VNC medidas. La actividad de piernas aporta locomoción; la actividad motora de alas/salto aporta empuje de vuelo y un pequeño movimiento vertical. No existe ningún comando directo estímulo→posición.
+
+La lógica del conectoma, sus 16.669 neuronas, las conexiones retenidas y el formato FBC102 permanecen intactos.
+
+## Arquitectura V1.06
 
 ### Selección connectómica
 - 16.669 neuronas exactamente.
@@ -72,7 +81,7 @@ La reducción a 16.669 neuronas es un subconjunto del MaleCNS completo, no un d�
 En particular, el glutamato se modela como inhibitorio en esta reducción siguiendo la convención empleada en simulaciones recientes del VNC de Drosophila; no se representan excepciones dependientes del receptor.
 
 
-## Interfaz V1.05
+## Interfaz V1.06
 La interfaz se simplifica deliberadamente para que la simulación sea lo primero que se vea:
 - 16.669 neuronas y referencia `MaleCNS v1.0`.
 - Solo se muestran comidas, escapes, saciedad, memoria y FPS en el bloque de estado.
@@ -82,4 +91,4 @@ La interfaz se simplifica deliberadamente para que la simulación sea lo primero
 - Se incluye un zumbido de mosca generado como recurso local. El audio se activa suavemente durante el movimiento o una interacción sensorial y se detiene en reposo.
 - La animación y el audio son capas de presentación: no modifican la dinámica neuronal ni crean órdenes motoras.
 
-La versión Android es `1.05` / `versionCode 105`; el formato binario interno continúa siendo `FBC102` para no romper la compatibilidad del lector existente.
+La versión Android es `1.06` / `versionCode 106`; el formato binario interno continúa siendo `FBC102` para no romper la compatibilidad del lector existente.
