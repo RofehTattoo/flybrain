@@ -309,22 +309,26 @@ class MainActivity : Activity() {
         private var dangerDirectionalBias = 0f
         private var dangerLoom = 0f
 
-        // V1.10: REST <-> LOCOMOTION is an endogenous homeostatic state.
-        // Both states can contain stochastic behavioral pauses; REST increases
-        // their frequency/duration rather than owning the pause mechanism.
-        // Body movement still comes only from measured VNC motor neurons.
+        // V1.11: behaviour is separated into homeostatic pressure, arousal,
+        // rest-state modulation, and *measured* locomotor pauses. A pause is no
+        // longer created by an external random timer. It is detected from the
+        // actual VNC motor output, while the retained halting DNs can strengthen
+        // only their EXISTING synapses onto motor neurons. No synthetic edge is added.
         private var explorationState = 0f
         private var explorationPhase = 0f
         private var motorActivityMemory = 0f
-        private var homeostaticDrive = 0f
+        private var sleepPressure = 0f
         private var arousalDrive = 0f
         private var restState = false
         private var restStateBlend = 0f
-        private var behavioralPause = false
-        private var behavioralPauseTimer = 0f
-        private var behavioralPauseCooldown = 0f
-        private var behavioralPauseDuration = 0f
+        private var pauseDetected = false
+        private var pauseTimer = 0f
+        private var inactivityContinuous = 0f
+        private var recentMovementMemory = 0f
+        private var pauseCount = 0
+        private var lastPauseDuration = 0f
         private var haltEvidenceDisplay = 0f
+        private var haltGateDisplay = 0f
         private var previousFoodDrive = 0f
         private var previousLightDrive = 0f
         private var previousDangerDrive = 0f
@@ -338,10 +342,17 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.10\n")
+            append("FLYBRAIN V1.11\n")
             append("16.669 neuronas · MaleCNS v1.0\n")
             append("Comidas $foodHits · Escapes $escapeEvents · Saciedad ${(satiety * 100).toInt()}% · Memoria ${(memoryTrace * 100).toInt()}% · FPS ${fps.toInt()}\n")
-            append("Estado ${if (restState) "REPOSO" else "LOCOMOCIÓN"} · Impulso homeostático ${(homeostaticDrive * 100).toInt()}%")
+            val stateLabel = if (restState) "REPOSO" else "LOCOMOCIÓN"
+            val behaviorLabel = when {
+                pauseDetected -> "PAUSA"
+                inactivityContinuous >= 300f -> "INMOVILIDAD PROLONGADA"
+                else -> "ACTIVA"
+            }
+            append("Estado $stateLabel · Conducta $behaviorLabel · Presión homeostática ${(sleepPressure * 100).toInt()}% · Inactividad ${inactivityContinuous.toInt()}s")
+            append("Pausas detectadas $pauseCount · Última ${lastPauseDuration.toInt()}s · Arousal ${(arousalDrive * 100).toInt()}% · Halting ${(haltGateDisplay * 100).toInt()}%")
         }
 
         private fun behaviorLabel(): String {
@@ -486,15 +497,18 @@ class MainActivity : Activity() {
             explorationState = .45f
             explorationPhase = 0f
             motorActivityMemory = 0f
-            homeostaticDrive = 0f
+            sleepPressure = 0f
             arousalDrive = 0f
             restState = false
             restStateBlend = 0f
-            behavioralPause = false
-            behavioralPauseTimer = 0f
-            behavioralPauseCooldown = 0f
-            behavioralPauseDuration = 0f
+            pauseDetected = false
+            pauseTimer = 0f
+            inactivityContinuous = 0f
+            recentMovementMemory = 0f
+            pauseCount = 0
+            lastPauseDuration = 0f
             haltEvidenceDisplay = 0f
+            haltGateDisplay = 0f
             previousFoodDrive = 0f
             previousLightDrive = 0f
             previousDangerDrive = 0f
@@ -920,116 +934,94 @@ class MainActivity : Activity() {
             explorationState += dt * (.20f * (targetExploration - explorationState))
             explorationState = explorationState.coerceIn(.05f, .95f)
 
-            // V1.10: continuous homeostatic/arousal dynamics.
-            // There is no fixed "70% -> REST" or "22% -> LOCOMOTION" threshold.
-            // Homeostatic drive accumulates from measured activity and continuously
-            // changes the hazard of entering REST. A stochastic transition lets the
-            // state emerge from the interaction of homeostasis, arousal and the
-            // retained halt-related network evidence rather than from a magic value.
+            // V1.11: separate HOMEOSTATIC PRESSURE from AROUSAL.
+            // sleepPressure represents accumulated need for rest; danger/light do not
+            // erase it. Arousal instead suppresses its expression while an urgent
+            // stimulus is present. This preserves a homeostatic debt that can be
+            // expressed after the stimulus disappears.
             val recentMotor = populationRate(MOTOR_START, MOTOR_END)
             motorActivityMemory = .94f * motorActivityMemory + .06f * recentMotor
             val dnHalt = descendingRoleRate(3)
-            val haltEvidence = (dnHalt * .70f + populationRate(ASC_START, ASC_END) * .30f).coerceIn(0f, 1f)
+            val haltEvidence = (dnHalt * .78f + populationRate(ASC_START, ASC_END) * .22f).coerceIn(0f, 1f)
             haltEvidenceDisplay = .94f * haltEvidenceDisplay + .06f * haltEvidence
+
+            // Halt evidence is a measured neural signal, not a synthetic command.
+            // It is used below only to modulate efficacy of existing DN->MN edges.
+            val haltGateTarget = dnHalt.coerceIn(0f, 1f)
+            haltGateDisplay += (haltGateTarget - haltGateDisplay) *
+                (1f - exp((-dt / .10f).toDouble()).toFloat())
+
             val threatDemand = dangerDrive.coerceIn(0f, 1f)
             val feedingDemand = (foodDrive * .55f + populationRate(GUST_START, GUST_END) * .45f).coerceIn(0f, 1f)
             val wakeDemand = max(threatDemand, lightDrive * .35f)
 
             if (!restState) {
-                // The homeostat is a drive, not a timer or a percentage threshold.
-                // Activity increases sleep pressure; strong threat/arousal opposes it.
-                val buildRate = (0.00055f + 0.0030f * motorActivityMemory + 0.0014f * haltEvidence)
-                    .coerceAtLeast(0f)
-                homeostaticDrive += dt * buildRate
-                homeostaticDrive -= dt * (.0022f * threatDemand)
-                homeostaticDrive = homeostaticDrive.coerceIn(0f, 1f)
-                arousalDrive = (arousalDrive - dt * .0008f).coerceAtLeast(0f)
+                // Awake pressure accumulates primarily with elapsed wake time, with
+                // measured activity providing a modest state-dependent acceleration.
+                // There is deliberately no percentage threshold.
+                val activityFactor = (.55f + .90f * motorActivityMemory).coerceIn(.45f, 1.55f)
+                val pressureRate = (0.00090f * activityFactor + 0.00035f * haltEvidence).coerceAtLeast(0f)
+                sleepPressure += dt * pressureRate
+                sleepPressure = sleepPressure.coerceIn(0f, 1f)
 
-                // Continuous stochastic hazard. The power-law makes the transition
-                // increasingly likely as the homeostatic drive grows, without a hard
-                // cutoff. Threat and sensory arousal continuously suppress the hazard.
-                val driveWeight = homeostaticDrive.toDouble().pow(1.8).toFloat().coerceIn(0f, 1f)
-                val lowArousal = (1f - max(threatDemand, lightDrive * .35f)).coerceIn(0f, 1f)
-                val restEntryHazard = (
-                    .00004f +
-                    .0115f * driveWeight * (.28f + .72f * lowArousal) +
-                    .0014f * haltEvidenceDisplay +
-                    .0008f * feedingDemand
-                ).coerceAtLeast(0f)
-                val restEntryProbability = (1f - exp((-restEntryHazard * dt).toDouble()).toFloat()).coerceIn(0f, 1f)
+                // Arousal is independent: threat makes the animal more wakeable, but
+                // does not delete the accumulated sleep debt.
+                val arousalInput = (threatDemand * 1.8f + lightDrive * .35f + sensoryArousal * .12f)
+                    .coerceIn(0f, 2f)
+                arousalDrive += dt * (.0065f * arousalInput - .0012f * arousalDrive)
+                arousalDrive = arousalDrive.coerceIn(0f, 1f)
+
+                // Continuous hazard, not a threshold: pressure raises the chance of
+                // entering rest, arousal suppresses that chance. The broad Hill curve
+                // is a numerical representation of increasing susceptibility, not a
+                // claimed biological percentage.
+                val pressureWeight = (sleepPressure * sleepPressure /
+                    (sleepPressure * sleepPressure + .20f * .20f)).coerceIn(0f, 1f)
+                val arousalSuppression = (1f - .82f * arousalDrive - .65f * wakeDemand)
+                    .coerceIn(.05f, 1f)
+                val restEntryHazard = (0.000015f +
+                    0.0038f * pressureWeight * arousalSuppression +
+                    0.00055f * haltGateDisplay * (0.30f + .70f * pressureWeight) +
+                    0.00025f * feedingDemand).coerceAtLeast(0f)
+                val restEntryProbability = (1f - exp((-restEntryHazard * dt).toDouble()).toFloat())
+                    .coerceIn(0f, 1f)
 
                 if (rng.nextFloat() < restEntryProbability) {
                     restState = true
-                    arousalDrive = .02f
-                    behavioralPause = false
-                    behavioralPauseTimer = 0f
-                    behavioralPauseCooldown = 1.2f + rng.nextFloat() * 3.0f
-                    behavioralPauseDuration = 0f
+                    arousalDrive *= .35f
                 }
             } else {
-                // During REST the homeostatic drive discharges continuously. Wake is
-                // also probabilistic: increasing arousal and recovery make locomotion
-                // more likely, while there is deliberately no hard "22%" exit point.
-                homeostaticDrive -= dt * (.0017f + .0011f * (1f - motorActivityMemory))
-                homeostaticDrive = homeostaticDrive.coerceIn(0f, 1f)
-                arousalDrive += dt * (.0010f + .0028f * (1f - homeostaticDrive))
+                // Rest discharges the homeostatic variable exponentially instead of
+                // aiming for a magic exit percentage. Arousal can terminate rest,
+                // especially when a real external stimulus is present.
+                val dischargeTau = 300f
+                sleepPressure += (0f - sleepPressure) *
+                    (1f - exp((-dt / dischargeTau).toDouble()).toFloat())
+                sleepPressure = sleepPressure.coerceIn(0f, 1f)
+
+                val arousalInput = (threatDemand * 2.4f + lightDrive * .45f + feedingDemand * .15f)
+                    .coerceIn(0f, 2.5f)
+                arousalDrive += dt * (.0080f * arousalInput + .0012f * (1f - sleepPressure) - .0010f * arousalDrive)
                 arousalDrive = arousalDrive.coerceIn(0f, 1f)
 
-                val recoveryWeight = (1f - homeostaticDrive).coerceIn(0f, 1f).toDouble().pow(1.35).toFloat()
-                val arousalWeight = arousalDrive.toDouble().pow(1.25).toFloat().coerceIn(0f, 1f)
-                val restExitHazard = (
-                    .00006f +
-                    .0032f * recoveryWeight +
-                    .0048f * arousalWeight +
-                    .020f * wakeDemand
-                ).coerceAtLeast(0f)
-                val restExitProbability = (1f - exp((-restExitHazard * dt).toDouble()).toFloat()).coerceIn(0f, 1f)
-
-                if (rng.nextFloat() < restExitProbability) {
+                val recoveryWeight = (1f - sleepPressure).coerceIn(0f, 1f)
+                val spontaneousWakeHazard = 0.00012f + 0.0014f * recoveryWeight + 0.0045f * arousalDrive
+                val wakeProbability = (1f - exp((-spontaneousWakeHazard * dt).toDouble()).toFloat())
+                    .coerceIn(0f, 1f)
+                if (rng.nextFloat() < wakeProbability) {
                     restState = false
-                    arousalDrive = .02f
+                    arousalDrive *= .45f
                 }
             }
-            val restTarget = if (restState) 1f else 0f
-            restStateBlend += (restTarget - restStateBlend) * (1f - exp((-dt / .35f).toDouble()).toFloat())
 
-            // V1.10: behavioral pauses exist in both LOCOMOTION and REST.
-            // They are separate from the homeostatic state: a fly can pause while
-            // still being in LOCOMOTION, and REST increases the frequency/duration
-            // of these pauses. Timing is stochastic rather than periodic.
-            if (behavioralPause) {
-                behavioralPauseTimer -= dt
-                if (behavioralPauseTimer <= 0f) {
-                    behavioralPause = false
-                    behavioralPauseCooldown = if (restState) {
-                        1.4f + rng.nextFloat() * 4.2f
-                    } else {
-                        8f + rng.nextFloat() * 42f
-                    }
-                    behavioralPauseDuration = 0f
-                }
-            } else {
-                behavioralPauseCooldown -= dt
-                if (behavioralPauseCooldown <= 0f) {
-                    val pauseHazard = if (restState) {
-                        // REST: frequent, somewhat longer inactivity episodes.
-                        .055f + .045f * restStateBlend + .025f * homeostaticDrive
-                    } else {
-                        // LOCOMOTION: occasional short pauses even before REST.
-                        .0065f + .012f * homeostaticDrive + .010f * haltEvidenceDisplay
-                    }
-                    val pauseProbability = (1f - exp((-pauseHazard * dt).toDouble()).toFloat()).coerceIn(0f, 1f)
-                    if (rng.nextFloat() < pauseProbability) {
-                        behavioralPause = true
-                        behavioralPauseDuration = if (restState) {
-                            .9f + rng.nextFloat() * 2.6f
-                        } else {
-                            .7f + rng.nextFloat() * 1.9f
-                        }
-                        behavioralPauseTimer = behavioralPauseDuration
-                    }
-                }
-            }
+            val restTarget = if (restState) 1f else 0f
+            restStateBlend += (restTarget - restStateBlend) *
+                (1f - exp((-dt / .35f).toDouble()).toFloat())
+
+            // V1.11: pauses are now MEASURED from the body output rather than
+            // scheduled by random timers. The neural halting circuit can create them
+            // through its retained synapses; the UI only reports what actually happened.
+            // driveBody() updates inactivityContinuous after reading the current MNs.
 
             previousFoodDrive = foodDrive
             previousLightDrive = lightDrive
@@ -1042,11 +1034,17 @@ class MainActivity : Activity() {
                     continue
                 }
 
+                val targetIsMotor = i in MOTOR_START until MOTOR_END
+                val haltEdgeGain = if (targetIsMotor) {
+                    1f + (1.60f * haltGateDisplay + 0.90f * restStateBlend * haltGateDisplay)
+                } else 1f
                 var syn = 0f
                 val src = incoming[i]
                 val w = incomingW[i]
                 for (k in src.indices) {
-                    syn += w[k] * synTrace[src[k]]
+                    val source = src[k]
+                    val sourceGain = if (targetIsMotor && descendingRole[source].toInt() == 3) haltEdgeGain else 1f
+                    syn += w[k] * synTrace[source] * sourceGain
                 }
                 // Do not clip the raw summed synaptic drive before gain. V1.04
                 // was saturating at +/-0.38 and suppressing long multi-hop paths.
@@ -1055,7 +1053,7 @@ class MainActivity : Activity() {
                 syn = syn.coerceIn(-.75f, .75f)
 
                 val isSensor = i < SENSOR_END
-                val isMotor = i in MOTOR_START until MOTOR_END
+                val isMotor = targetIsMotor
                 val isDesc = i in DESC_START until DESC_END
                 val centralNoise = if (!isSensor && !isMotor) {
                     val phase = i * .0173f + explorationPhase * (1.0f + (i % 5) * .07f)
@@ -1093,14 +1091,6 @@ class MainActivity : Activity() {
                     locomotorBias * dt * 18f - restInhibition + wakeDrive
                 } else 0f
 
-                // V1.10: express a micro-pause upstream at the VNC motor-neuron
-                // level instead of freezing body coordinates. Movement therefore
-                // remains causally tied to measured motor activity. A small residual
-                // drive is intentionally left so occasional tiny twitches are possible.
-                val motorPauseInhibition = if (isMotor && behavioralPause) {
-                    (.045f + .085f * restStateBlend) * dt * 18f
-                } else 0f
-
                 val tonic = when {
                     isDesc -> .0075f
                     i in ASC_START until ASC_END -> .0020f
@@ -1123,7 +1113,7 @@ class MainActivity : Activity() {
 
                 val synCurrent = (syn * synGain).coerceIn(-.55f, .55f)
                 v[i] += ((V_REST - v[i]) * 5.8f - adapt[i]) * dt + synCurrent +
-                    tonic * dt * 10f + centralNoise + centralStateDrive + stateDrive - motorPauseInhibition
+                    tonic * dt * 10f + centralNoise + centralStateDrive + stateDrive
                 fired[i] = v[i] >= V_THRESHOLD
 
                 if (fired[i]) {
@@ -1333,6 +1323,23 @@ class MainActivity : Activity() {
             jumpActivity = if (nJump == 0) 0f else jumpActivity / nJump
             abdomenActivity = if (nAbd == 0) 0f else abdomenActivity / nAbd
             wingActivityCache = wingActivity
+
+            // V1.11: behavioural pause/sleep evidence is derived from actual VNC
+            // motor output. No random timer declares a pause. A pause starts only
+            // after the body has genuinely become nearly immobile.
+            val locomotorOutput = (legActivity * .82f + neckActivity * .08f + jumpActivity * .10f).coerceIn(0f, 1f)
+            recentMovementMemory = .94f * recentMovementMemory + .06f * locomotorOutput
+            val wasActuallyMoving = recentMovementMemory > .025f
+            if (locomotorOutput < .012f && flySpeed < .0015f) {
+                inactivityContinuous += dt
+            } else {
+                if (pauseDetected) lastPauseDuration = inactivityContinuous
+                inactivityContinuous = 0f
+            }
+            val wasPause = pauseDetected
+            pauseDetected = inactivityContinuous >= .80f && wasActuallyMoving
+            pauseTimer = if (pauseDetected) inactivityContinuous else 0f
+            if (!wasPause && pauseDetected) pauseCount++
 
             // Body mechanics are deliberately simple, but every locomotor command
             // originates from measured VNC motor activity. Left/right asymmetry in

@@ -1,4 +1,4 @@
-# FlyBrain V1.10
+# FlyBrain V1.11
 
 ## Objetivo
 V1.07 mantiene exactamente 16.669 neuronas del MaleCNS v1.0 y da prioridad explícita a la preservación de rutas funcionales medidas en el conectoma reducido. La selección ya no depende únicamente de grado/superclase: se conservan preferentemente neuronas intermedias que participan en rutas de dos saltos `sensor -> célula -> DN` y `DN -> célula -> MN`, separando familias de avance, orientación/giro, escape y sensorimotora general.
@@ -75,6 +75,19 @@ El binario FBC102 tiene:
 
 Si el connectome falla al cargar, la aplicación entra en `fail-closed`: no se crea una red neuronal alternativa.
 
+## V1.11 — arquitectura homeostática y locomotora revisada
+
+V1.11 corrige el controlador de reposo de las versiones anteriores. El cambio principal no es bajar o subir un umbral, sino separar cuatro fenómenos: presión homeostática, arousal, estado de reposo y pausa locomotora medida.
+
+- `sleepPressure` acumula necesidad de descanso durante la vigilia y se descarga exponencialmente durante el reposo. No existe un valor porcentual que fuerce por sí mismo una transición.
+- `arousalDrive` representa activación de vigilia y puede suprimir temporalmente la expresión del descanso sin borrar la presión acumulada.
+- La entrada/salida de `REST` sigue siendo probabilística y continua; no utiliza los antiguos umbrales 70%/22%.
+- Las pausas locomotoras ya no son creadas por un temporizador aleatorio externo. La aplicación las detecta a partir de la salida motora VNC real.
+- La evidencia de neuronas descendentes de halting (rol 3) puede aumentar únicamente la eficacia de las sinapsis DN→MN que ya existen en el conectoma retenido. No se añaden aristas artificiales ni se congela directamente la posición de la mosca.
+- Se registra duración de inactividad y número de pausas para poder calibrar el comportamiento con pruebas reproducibles.
+
+Esta separación permite distinguir una pausa locomotora breve de un reposo prolongado y evita que peligro/escape borre artificialmente la necesidad homeostática acumulada. Los parámetros numéricos de la dinámica son de calibración computacional; no deben interpretarse como porcentajes fisiológicos medidos en una mosca real.
+
 ## Limitaciones científicas
 La reducción a 16.669 neuronas es un subconjunto del MaleCNS completo, no un décimo espacial exacto de cada circuito. Las puntuaciones de ruta son una herramienta de preservación topológica, no una afirmación de que cada neurona tenga una función conductual única. Los roles DN usan nombres de tipos publicados cuando existe evidencia funcional establecida (por ejemplo DNg100/DNg97/DNb08 para marcha y DNp01/Giant Fiber para escape). La selección de escape protege también las entradas visuales hacia el DNp01 (LC4/LPLC2) cuando están presentes en las anotaciones y aristas retenidas. La dinámica LIF, el signo neurotransmisor-resuelto y la mecánica corporal siguen siendo aproximaciones computacionales.
 
@@ -91,7 +104,7 @@ La interfaz se simplifica deliberadamente para que la simulación sea lo primero
 - Se incluye un zumbido de mosca generado como recurso local. El audio se activa suavemente durante el movimiento o una interacción sensorial y se detiene en reposo.
 - La animación y el audio son capas de presentación: no modifican la dinámica neuronal ni crean órdenes motoras.
 
-La versión Android de esta entrega es `1.10` / `versionCode 110`; el formato binario interno continúa siendo `FBC102` para no romper la compatibilidad del lector existente.
+La versión Android de esta entrega es `1.11` / `versionCode 111`; el formato binario interno continúa siendo `FBC102` para no romper la compatibilidad del lector existente.
 
 ## V1.07 — visualización neuronal y estímulo de comida
 
@@ -123,9 +136,9 @@ Esto no se presenta como un modelo de sueño. Es una primera aproximación a las
 La presión de reposo es una abstracción homeostática del modelo, no una neurona nueva ni una conexión añadida. No escribe directamente posición, velocidad, rumbo ni actividad motora.
 
 
-## V1.10 — dinámica homeostática continua y pausas conductuales
+## V1.11 — dinámica homeostática continua y pausas conductuales
 
-V1.10 cambia el modelo de REST/LOCOMOTION para eliminar los umbrales rígidos que se habían utilizado en V1.08/V1.09 como mecanismo provisional de prueba. Los valores anteriores (~70 % para entrar en REPOSO y ~22 % para salir) **no se consideran parámetros biológicos de Drosophila** y ya no controlan las transiciones.
+V1.11 cambia el modelo de REST/LOCOMOTION para eliminar los umbrales rígidos que se habían utilizado en V1.08/V1.09 como mecanismo provisional de prueba. Los valores anteriores (~70 % para entrar en REPOSO y ~22 % para salir) **no se consideran parámetros biológicos de Drosophila** y ya no controlan las transiciones.
 
 El nuevo modelo separa tres fenómenos:
 

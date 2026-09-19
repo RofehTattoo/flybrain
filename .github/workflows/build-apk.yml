@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V1.10
+name: Build FlyBrain APK V1.11
 
 on:
   workflow_dispatch:
@@ -58,7 +58,7 @@ jobs:
       # ============================================================
       # 6. COMPROBAR ESTRUCTURA DEL REPOSITORIO
       # ============================================================
-      - name: Comprobar estructura V1.10
+      - name: Comprobar estructura V1.11
         run: |
           set -euo pipefail
 
@@ -76,9 +76,9 @@ jobs:
           echo "ESTRUCTURA DEL REPOSITORIO: OK"
 
       # ============================================================
-      # 7. IDENTIDAD V1.10
+      # 7. IDENTIDAD V1.11
       # ============================================================
-      - name: Comprobar identidad V1.10
+      - name: Comprobar identidad V1.11
         run: |
           set -euo pipefail
 
@@ -88,9 +88,9 @@ jobs:
           BUILDER="tools/build_connectome.py"
           WORKFLOW=".github/workflows/build-apk.yml"
 
-          grep -Fq 'versionCode = 110' "$APP"
-          grep -Fq 'versionName = "1.10"' "$APP"
-          grep -Fq 'FLYBRAIN V1.10' "$MAIN"
+          grep -Fq 'versionCode = 111' "$APP"
+          grep -Fq 'versionName = "1.11"' "$APP"
+          grep -Fq 'FLYBRAIN V1.11' "$MAIN"
           grep -Fq 'FORMAT_MAGIC = "FBC102"' "$META"
           grep -Fq 'FORMAT_VERSION = 102' "$META"
           grep -Fq 'NEURONS = 16669' "$META"
@@ -99,7 +99,7 @@ jobs:
           grep -Fq 'EDGE_SIZE = 12' "$BUILDER"
 
           grep -Fq 'FBC102' "$WORKFLOW"
-          grep -Fq 'FlyBrain-V1.10-APK' "$WORKFLOW"
+          grep -Fq 'FlyBrain-V1.11-APK' "$WORKFLOW"
           grep -Fq 'FORMAT_VERSION = 102' "$BUILDER"
 
           if grep -Eq 'versionCode = 102|versionName = "1\\.02"|FLYBRAIN V1\\.02|flybrain_version": "1\\.02"' \
@@ -108,12 +108,12 @@ jobs:
             exit 1
           fi
 
-          echo "IDENTIDAD V1.10: OK"
+          echo "IDENTIDAD V1.11: OK"
 
       # ============================================================
       # 8. PYTHON: SINTAXIS + REGRESION DE ARRAYS SELECCIONADOS
       # ============================================================
-      - name: Validar scripts Python V1.10
+      - name: Validar scripts Python V1.11
         run: |
           set -euo pipefail
 
@@ -170,7 +170,7 @@ jobs:
       # ============================================================
       # 10. GENERAR MALECNS REDUCIDO REAL
       # ============================================================
-      - name: Generar reducción real MaleCNS V1.10
+      - name: Generar reducción real MaleCNS V1.11
         run: |
           set -euo pipefail
 
@@ -210,7 +210,7 @@ jobs:
           d = json.loads(p.read_text())
 
           assert d["dataset"] == "MaleCNS v1.0"
-          assert d["flybrain_version"] == "1.10"
+          assert d["flybrain_version"] == "1.11"
           assert d["binary_format"] == "FBC102"
           assert d["neurons_retained"] == 16669
           assert d["node_record_bytes"] == 25
@@ -468,17 +468,23 @@ jobs:
             exit 1
           fi
 
-          grep -Fq 'homeostaticDrive += dt * buildRate' "$MAIN"
+          grep -Fq 'sleepPressure += dt * pressureRate' "$MAIN"
           grep -Fq 'val restEntryHazard = (' "$MAIN"
           grep -Fq 'val restEntryProbability =' "$MAIN"
-          grep -Fq 'val restExitHazard = (' "$MAIN"
-          grep -Fq 'val restExitProbability =' "$MAIN"
-          grep -Fq 'val motorPauseInhibition = if (isMotor && behavioralPause)' "$MAIN"
-          grep -Fq 'val pauseHazard = if (restState)' "$MAIN"
+          grep -Fq 'val spontaneousWakeHazard =' "$MAIN"
+          grep -Fq 'val wakeProbability =' "$MAIN"
+          grep -Fq 'val haltEdgeGain = if (targetIsMotor)' "$MAIN"
+          grep -Fq 'descendingRole[source].toInt() == 3' "$MAIN"
+          grep -Fq 'pauseDetected = inactivityContinuous >= .80f' "$MAIN"
           grep -Fq 'val restInhibition = if (!isSensor && !isMotor && restState)' "$MAIN"
 
-          if grep -Eq 'homeostaticDrive >|homeostaticDrive <|arousalDrive >|arousalDrive <|restPressure >|restPressure <|wakePressure >|wakePressure <' "$MAIN"; then
-            echo 'ERROR: hard homeostatic/arousal threshold detected in V1.10'
+          if grep -Eq 'behavioralPause|behavioralPauseTimer|behavioralPauseCooldown|motorPauseInhibition|val pauseHazard' "$MAIN"; then
+            echo 'ERROR: external random pause controller detected in V1.11'
+            exit 1
+          fi
+
+          if grep -Eq 'sleepPressure >|sleepPressure <|homeostaticDrive >|homeostaticDrive <|restPressure >|restPressure <|wakePressure >|wakePressure <' "$MAIN"; then
+            echo 'ERROR: hard homeostatic/arousal threshold detected in V1.11'
             exit 1
           fi
 
@@ -536,7 +542,7 @@ jobs:
       # ============================================================
       # 17. KOTLIN ESTRUCTURAL
       # ============================================================
-      - name: Validar estructura Kotlin V1.10
+      - name: Validar estructura Kotlin V1.11
         run: |
           set -euo pipefail
 
@@ -574,10 +580,10 @@ jobs:
           test -s app/src/main/res/raw/malecns_reduced.bin
           test -s app/src/main/res/raw/malecns_reduced_report.json
 
-          grep -Fq 'versionCode = 110' \
+          grep -Fq 'versionCode = 111' \
             app/build.gradle.kts
 
-          grep -Fq 'versionName = "1.10"' \
+          grep -Fq 'versionName = "1.11"' \
             app/build.gradle.kts
 
           grep -Fq 'FORMAT_VERSION = 102' \
@@ -586,7 +592,7 @@ jobs:
           grep -Fq 'NEURONS = 16669' \
             app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
 
-          grep -Fq '"flybrain_version": "1.10"' \
+          grep -Fq '"flybrain_version": "1.11"' \
             app/src/main/res/raw/malecns_reduced_report.json
 
           grep -Fq '"binary_format": "FBC102"' \
@@ -597,7 +603,7 @@ jobs:
       # ============================================================
       # 19. COMPILAR APK
       # ============================================================
-      - name: Compilar APK V1.10
+      - name: Compilar APK V1.11
         run: |
           set -euo pipefail
 
@@ -607,7 +613,7 @@ jobs:
       # ============================================================
       # 20. VERIFICAR APK REAL
       # ============================================================
-      - name: Verificar APK V1.10
+      - name: Verificar APK V1.11
         run: |
           set -euo pipefail
 
@@ -629,10 +635,10 @@ jobs:
             grep -Fq "package: name='com.example.flybrain'"
 
           echo "$BADGING" | \
-            grep -Fq "versionCode='110'"
+            grep -Fq "versionCode='111'"
 
           echo "$BADGING" | \
-            grep -Fq "versionName='1.10'"
+            grep -Fq "versionName='1.11'"
 
           unzip -l "$APK" | \
             grep -Fq 'malecns_reduced.bin'
@@ -640,7 +646,7 @@ jobs:
           unzip -l "$APK" | \
             grep -Fq 'malecns_reduced_report.json'
 
-          echo "APK V1.10 VALIDADO"
+          echo "APK V1.11 VALIDADO"
 
           ls -lh "$APK"
 
@@ -649,10 +655,10 @@ jobs:
       # ============================================================
       # 21. SUBIR APK
       # ============================================================
-      - name: Subir APK V1.10
+      - name: Subir APK V1.11
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V1.10-APK
+          name: FlyBrain-V1.11-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
