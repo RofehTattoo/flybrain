@@ -422,7 +422,7 @@ jobs:
       # ============================================================
       # 15. DINAMICA + DIAGNOSTICOS + ACCIONES
       # ============================================================
-      - name: Validar dinámica, diagnóstico y acciones
+      - name: Validar dinámica, diagnóstico y acciones V1.11
         run: |
           set -euo pipefail
 
@@ -443,14 +443,18 @@ jobs:
             forwardRouteActivityDisplay \
             turnRouteActivityDisplay \
             escapeRouteActivityDisplay \
-            homeostaticDrive \
+            sleepPressure \
             arousalDrive \
             restState \
             restStateBlend \
-            behavioralPause \
-            behavioralPauseTimer \
-            behavioralPauseCooldown \
+            pauseDetected \
+            pauseTimer \
+            inactivityContinuous \
+            recentMovementMemory \
+            pauseCount \
+            lastPauseDuration \
             haltEvidenceDisplay \
+            haltGateDisplay \
             approachAction \
             escapeAction \
             orientAction \
@@ -532,7 +536,7 @@ jobs:
           grep -Fq 'if (danger > .68f && lastDangerLevel <= .68f && escapeNeural)' "$MAIN"
           grep -Fq 'if (foodOn && foodDistance < .055f && gustatoryRateNow > .04f' "$MAIN"
 
-          if grep -Eq 'restState.*(flyX|flyY|flySpeed|heading)|homeostaticDrive.*(flyX|flyY|flySpeed|heading)|arousalDrive.*(flyX|flyY|flySpeed|heading)' "$MAIN"; then
+          if grep -Eq 'restState.*(flyX|flyY|flySpeed|heading)|sleepPressure.*(flyX|flyY|flySpeed|heading)|arousalDrive.*(flyX|flyY|flySpeed|heading)' "$MAIN"; then
             echo "ERROR: reposo conectado directamente a la mecánica corporal"
             exit 1
           fi
