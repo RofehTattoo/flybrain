@@ -39,7 +39,7 @@ def main(root: Path) -> None:
     main_text = main_path.read_text()
 
     assert report["dataset"] == "MaleCNS v1.0"
-    assert report["flybrain_version"] == "1.04"
+    assert report["flybrain_version"] == "1.05"
     assert report["binary_format"] == "FBC102"
     assert report["node_record_bytes"] == NODE_SIZE
     assert report["edge_record_bytes"] == EDGE_SIZE

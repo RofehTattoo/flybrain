@@ -131,6 +131,17 @@ class MainActivity : Activity() {
         // body-to-body connections from the source connectome.
         private val N = GeneratedConnectomeMeta.NEURONS
 
+        // V1.05: gain calibration for the existing connectome only. These values
+        // do not add neurons or edges; they control how strongly measured spikes
+        // move the existing LIF membrane potentials.
+        private val SENSORY_VIS_GAIN = 0.70f
+        private val SENSORY_OLF_GAIN = 1.00f
+        private val SENSORY_GUST_GAIN = 0.85f
+        private val SENSORY_MECH_GAIN = 0.70f
+        private val V_REST = -0.72f
+        private val V_THRESHOLD = -0.50f
+        private val V_RESET = -0.84f
+
         private val VIS_START = GeneratedConnectomeMeta.VIS_START
         private val VIS_END = GeneratedConnectomeMeta.VIS_END
         private val OLF_START = GeneratedConnectomeMeta.OLF_START
@@ -149,7 +160,7 @@ class MainActivity : Activity() {
         private val MOTOR_START = GeneratedConnectomeMeta.VMOTOR_START
         private val MOTOR_END = GeneratedConnectomeMeta.VMOTOR_END
 
-        private val v = FloatArray(N) { -0.72f }
+        private val v = FloatArray(N) { V_REST }
         private val adapt = FloatArray(N)
         private val fired = BooleanArray(N)
         private val prevFired = BooleanArray(N)
@@ -162,7 +173,7 @@ class MainActivity : Activity() {
         private val routeTurn = FloatArray(N)
         private val routeEscape = FloatArray(N)
         private val refractory = FloatArray(N)
-        // V1.04: short-lived chemical synaptic trace (~45 ms).
+        // V1.05: short-lived chemical synaptic trace (~45 ms), unchanged from V1.04.
         private val synTrace = FloatArray(N)
 
         private val incoming = Array(N) { IntArray(0) }
@@ -292,7 +303,7 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.04\n")
+            append("FLYBRAIN V1.05\n")
             append("16.669 neuronas · MaleCNS v1.0\n")
             append("Comidas $foodHits · Escapes $escapeEvents · Saciedad ${(satiety * 100).toInt()}% · Memoria ${(memoryTrace * 100).toInt()}% · FPS ${fps.toInt()}")
         }
@@ -358,7 +369,7 @@ class MainActivity : Activity() {
 
         fun resetSimulation() {
             for (i in 0 until N) {
-                v[i] = -0.72f
+                v[i] = V_REST
                 adapt[i] = 0f
                 fired[i] = false
                 prevFired[i] = false
@@ -758,10 +769,10 @@ class MainActivity : Activity() {
 
             // Environmental signals enter only measured sensory populations.
             // Direction is represented by left/centre/right/front/rear activity.
-            injectSensoryPopulation(VIS_START, VIS_END, combinedVisual, .34f)
-            injectSensoryPopulation(OLF_START, OLF_END, foodPattern, .62f)
-            injectSensoryPopulation(GUST_START, GUST_END, tastePattern, .48f)
-            injectSensoryPopulation(MECH_START, MECH_END, dangerPattern, .28f)
+            injectSensoryPopulation(VIS_START, VIS_END, combinedVisual, SENSORY_VIS_GAIN)
+            injectSensoryPopulation(OLF_START, OLF_END, foodPattern, SENSORY_OLF_GAIN)
+            injectSensoryPopulation(GUST_START, GUST_END, tastePattern, SENSORY_GUST_GAIN)
+            injectSensoryPopulation(MECH_START, MECH_END, dangerPattern, SENSORY_MECH_GAIN)
 
             foodDirectionalBias = ((foodPattern[0] - foodPattern[2]) /
                 (foodPattern[0] + foodPattern[2] + .001f)).coerceIn(-1f, 1f)
@@ -884,20 +895,26 @@ class MainActivity : Activity() {
                     else -> 0f
                 }
 
+                // V1.05: amplify transmission through the EXISTING retained
+                // connectome. The topology and weights are untouched; this is a
+                // single model-gain calibration so sparse reduced paths can cross
+                // the LIF threshold instead of dying after the first synapse.
+                // The gain is strongest at DN/VNC stages where the reduction is
+                // sparsest, while the current ceiling prevents runaway saturation.
                 val synGain = when {
-                    isMotor -> 1.55f
-                    isDesc -> 1.45f
-                    i in ASC_START until ASC_END -> 1.25f
-                    else -> 1.18f
+                    isMotor -> 5.00f
+                    isDesc -> 6.00f
+                    i in ASC_START until ASC_END -> 4.50f
+                    else -> 5.00f
                 }
 
                 val synCurrent = (syn * synGain).coerceIn(-.55f, .55f)
-                v[i] += ((-.72f - v[i]) * 5.8f - adapt[i]) * dt + synCurrent +
+                v[i] += ((V_REST - v[i]) * 5.8f - adapt[i]) * dt + synCurrent +
                     tonic * dt * 10f + centralNoise + centralStateDrive + stateDrive
-                fired[i] = v[i] >= -.49f
+                fired[i] = v[i] >= V_THRESHOLD
 
                 if (fired[i]) {
-                    v[i] = -.84f
+                    v[i] = V_RESET
                     adapt[i] = min(.18f, adapt[i] + .026f)
                     refractory[i] = .005f
                 }
