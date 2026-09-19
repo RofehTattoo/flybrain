@@ -758,25 +758,28 @@ def main(root: Path) -> None:
         for src, dst, weight in edges:
             f.write(struct.pack("<iif", int(src), int(dst), float(weight)))
 
-    def superclass_range(name):
-        idxs = np.where(selected["superclass"].astype(str).to_numpy() == name)[0]
+    def block_range(block_id):
+        idxs = np.where(selected["block"].to_numpy(np.int8) == block_id)[0]
         return (int(idxs.min()), int(idxs.max()+1)) if len(idxs) else (0,0)
 
-    desc = superclass_range("descending_neuron")
-    asc = superclass_range("ascending_neuron")
-    vmotor = superclass_range("vnc_motor")
-    # OTHER is the runtime sensory/central remainder block. It must use the
-    # same contiguous node range as channel_ranges["other"], not the source
-    # selection's historical block-7 positions. Using block-7 here produced
-    # the V1.04 validator failure: OTHER_START=0 while channel_ranges["other"]
-    # correctly started at 1457.
-    other = (int(ranges["other"][0]), int(ranges["other"][1]))
+    # Runtime population ranges follow the stable anatomical block order.
+    # channel=4 means "non-sensory" and spans DESC/ASC/MOTOR/OTHER; it is
+    # therefore not the runtime OTHER population.
+    desc = block_range(4)
+    asc = block_range(5)
+    vmotor = block_range(6)
+    other = block_range(7)
+    population_ranges = {
+        "visual": block_range(0), "olfactory": block_range(1),
+        "gustatory": block_range(2), "mechanosensory": block_range(3),
+        "descending": desc, "ascending": asc, "motor": vmotor, "other": other,
+    }
 
     meta = root / "app" / "src" / "main" / "java" / "com" / "example" / "flybrain" / "GeneratedConnectomeMeta.kt"
     motor_role_counts = {int(k): int(v) for k,v in selected.groupby("motor_role").size().to_dict().items()}
 
     meta.write_text('package com.example.flybrain\n\nobject GeneratedConnectomeMeta {\n    const val VERSION = "MaleCNS v1.0 · FlyBrain V1.05"\n    const val FORMAT_MAGIC = "FBC102"\n    const val FORMAT_VERSION = 102\n    const val NEURONS = %d\n    const val EDGES = %d\n    const val CONTACTS_RETAINED = %dL\n    const val VIS_START = %d\n    const val VIS_END = %d\n    const val OLF_START = %d\n    const val OLF_END = %d\n    const val GUST_START = %d\n    const val GUST_END = %d\n    const val MECH_START = %d\n    const val MECH_END = %d\n    const val DESC_START = %d\n    const val DESC_END = %d\n    const val ASC_START = %d\n    const val ASC_END = %d\n    const val VMOTOR_START = %d\n    const val VMOTOR_END = %d\n    const val OTHER_START = %d\n    const val OTHER_END = %d\n    const val MOTOR_LEG = 1\n    const val MOTOR_WING = 2\n    const val MOTOR_HALTERE = 3\n    const val MOTOR_NECK = 4\n    const val MOTOR_ABDOMEN = 5\n    const val MOTOR_JUMP = 6\n    const val MOTOR_OTHER = 7\n}\n' % (TARGET, len(edges), contacts,
-       ranges["visual"][0], ranges["visual"][1], ranges["olfactory"][0], ranges["olfactory"][1],
+       population_ranges["visual"][0], population_ranges["visual"][1], population_ranges["olfactory"][0], population_ranges["olfactory"][1],
        ranges["gustatory"][0], ranges["gustatory"][1], ranges["mechanosensory"][0], ranges["mechanosensory"][1],
        desc[0], desc[1], asc[0], asc[1], vmotor[0], vmotor[1], other[0], other[1]))
 
@@ -810,6 +813,7 @@ def main(root: Path) -> None:
         "superclass_counts_source": {str(k): int(v) for k,v in counts.items()},
         "superclass_extra_quota": {str(k): int(v) for k,v in extra_quota.items()},
         "channel_ranges": ranges,
+        "population_ranges": {k: [int(v[0]), int(v[1])] for k, v in population_ranges.items()},
         "edge_signs": NT_SIGN,
         "glutamate_modeling_convention": "glutamatergic edges are treated as inhibitory in the reduced dynamical model; receptor-specific exceptions are not represented",
         "unresolved_edges_policy": "edges with no recognized transmitter sign are omitted from direct current",

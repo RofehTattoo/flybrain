@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent structural validation for FlyBrain V1.04 generated data."""
+"""Independent structural validation for FlyBrain V1.05 generated data."""
 from __future__ import annotations
 
 import json
@@ -9,7 +9,7 @@ import struct
 from pathlib import Path
 
 TARGET = 16669
-MAGIC = b"FBC102\x00\x00"  # Binary format remains FBC102; app release is V1.04.
+MAGIC = b"FBC102\x00\x00"  # Binary format remains FBC102; app release is V1.05.
 NODE_SIZE = 25
 EDGE_SIZE = 12
 HEADER_SIZE = 16
@@ -86,15 +86,32 @@ def main(root: Path) -> None:
         previous_end = end
     assert previous_end == TARGET
 
-    # Generated Kotlin metadata must exactly mirror the report ranges. This
-    # catches the V1.02 startup crash where source-table indices leaked into the
-    # 16,669-node runtime array.
+    # channel_ranges describes sensory classification; population_ranges describes
+    # the actual contiguous runtime blocks consumed by MainActivity.
+    population_ranges = report["population_ranges"]
+    population_names = ("visual", "olfactory", "gustatory", "mechanosensory", "descending", "ascending", "motor", "other")
+    previous_end = 0
+    for name in population_names:
+        pair = population_ranges[name]
+        assert len(pair) == 2, (name, pair)
+        start, end = map(int, pair)
+        assert 0 <= start <= end <= TARGET, (name, pair)
+        assert start == previous_end, (name, pair, previous_end)
+        previous_end = end
+    assert previous_end == TARGET
+
+    # Generated Kotlin metadata must exactly mirror the runtime population
+    # ranges. This prevents channel=4 (all non-sensory neurons) from being
+    # mistaken for the final OTHER runtime block.
     meta_expected = {
-        "VIS_START": ranges["visual"][0], "VIS_END": ranges["visual"][1],
-        "OLF_START": ranges["olfactory"][0], "OLF_END": ranges["olfactory"][1],
-        "GUST_START": ranges["gustatory"][0], "GUST_END": ranges["gustatory"][1],
-        "MECH_START": ranges["mechanosensory"][0], "MECH_END": ranges["mechanosensory"][1],
-        "OTHER_START": ranges["other"][0], "OTHER_END": ranges["other"][1],
+        "VIS_START": population_ranges["visual"][0], "VIS_END": population_ranges["visual"][1],
+        "OLF_START": population_ranges["olfactory"][0], "OLF_END": population_ranges["olfactory"][1],
+        "GUST_START": population_ranges["gustatory"][0], "GUST_END": population_ranges["gustatory"][1],
+        "MECH_START": population_ranges["mechanosensory"][0], "MECH_END": population_ranges["mechanosensory"][1],
+        "DESC_START": population_ranges["descending"][0], "DESC_END": population_ranges["descending"][1],
+        "ASC_START": population_ranges["ascending"][0], "ASC_END": population_ranges["ascending"][1],
+        "VMOTOR_START": population_ranges["motor"][0], "VMOTOR_END": population_ranges["motor"][1],
+        "OTHER_START": population_ranges["other"][0], "OTHER_END": population_ranges["other"][1],
     }
     for name, value in meta_expected.items():
         assert parse_meta_int(meta, name) == int(value), (name, value)
