@@ -197,6 +197,11 @@ class MainActivity : Activity() {
         // V1.06: short-lived chemical synaptic trace (~45 ms), unchanged from V1.04.
         private val synTrace = FloatArray(N)
 
+        // V1.07: presentation-only activity persistence. It smooths individual
+        // spikes into a short visual intensity trail so activation/deactivation
+        // can be read without changing the neural state or connectivity.
+        private val visualActivity = FloatArray(N)
+
         private val incoming = Array(N) { IntArray(0) }
         private val incomingW = Array(N) { FloatArray(0) }
         private val baseW = Array(N) { FloatArray(0) }
@@ -326,7 +331,7 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.06\n")
+            append("FLYBRAIN V1.07\n")
             append("16.669 neuronas · MaleCNS v1.0\n")
             append("Comidas $foodHits · Escapes $escapeEvents · Saciedad ${(satiety * 100).toInt()}% · Memoria ${(memoryTrace * 100).toInt()}% · FPS ${fps.toInt()}")
         }
@@ -985,6 +990,10 @@ class MainActivity : Activity() {
                     adapt[i] = min(.18f, adapt[i] + .026f)
                     refractory[i] = .005f
                 }
+
+                // Visual-only short memory of activity. It is deliberately
+                // outside the LIF equations: it cannot feed back into v/adapt.
+                visualActivity[i] = (visualActivity[i] * .88f + if (fired[i]) .22f else 0f).coerceIn(0f, 1f)
             }
         }
 
@@ -1349,15 +1358,7 @@ class MainActivity : Activity() {
             paint.style = Paint.Style.FILL
 
             if (foodOn) {
-                val x = foodX * width
-                val y = foodY * bottom
-                paint.color = Color.rgb(32, 155, 70)
-                c.drawCircle(x, y, 22f, paint)
-                paint.color = Color.WHITE
-                paint.textSize = 16f
-                paint.textAlign = Paint.Align.CENTER
-                paint.typeface = Typeface.DEFAULT_BOLD
-                c.drawText("F", x, y + 6f, paint)
+                drawBanana(c, foodX * width, foodY * bottom)
             }
 
             if (lightOn) {
@@ -1387,6 +1388,38 @@ class MainActivity : Activity() {
             }
         }
 
+        private fun drawBanana(c: Canvas, px: Float, py: Float) {
+            c.save()
+            val scale = (min(width.toFloat(), sceneBottom()) / 520f).coerceIn(.82f, 1.18f)
+            c.translate(px, py)
+            c.rotate(-18f)
+            c.scale(scale, scale)
+            val path = android.graphics.Path().apply {
+                moveTo(-25f, 8f)
+                cubicTo(-12f, 35f, 24f, 38f, 42f, 15f)
+                cubicTo(50f, 4f, 45f, -12f, 38f, -20f)
+                cubicTo(35f, -4f, 30f, 7f, 20f, 13f)
+                cubicTo(8f, 22f, -8f, 20f, -20f, -2f)
+                cubicTo(-27f, -11f, -31f, -1f, -25f, 8f)
+                close()
+            }
+            paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(247, 202, 45)
+            c.drawPath(path, paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 2.2f
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.color = Color.rgb(166, 116, 24)
+            c.drawPath(path, paint)
+            paint.strokeWidth = 4f
+            c.drawLine(-26f, 5f, -31f, 0f, paint)
+            c.drawLine(39f, -19f, 45f, -24f, paint)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.argb(70, 255, 240, 120)
+            c.drawOval(-7f, 4f, 22f, 13f, paint)
+            c.restore()
+        }
+
         private fun drawBrainPanel(c: Canvas) {
             val ph = brainPanelHeight()
             val top = height - ph
@@ -1400,8 +1433,10 @@ class MainActivity : Activity() {
             paint.textSize = 13f
             c.drawText("ACTIVIDAD NEURAL · 16.669 NEURONAS", 20f, top + 21f, paint)
 
-            val mapTop = top + 30f
-            val mapBottom = height - 25f
+            val legendTop = top + 28f
+            drawRegionLegend(c, 18f, legendTop, width - 36f)
+            val mapTop = top + 58f
+            val mapBottom = height - 27f
             drawBrainMap(c, 14f, mapTop, width - 28f, max(100f, mapBottom - mapTop))
 
             paint.color = Color.rgb(185, 192, 196)
@@ -1446,6 +1481,50 @@ class MainActivity : Activity() {
             c.drawText("$label ${(value * 100).toInt()}%", x + 7f, y + 14f, paint)
         }
 
+        private fun regionColor(id: Int): Int = when {
+            id in VIS_START until VIS_END -> Color.rgb(55, 145, 235)
+            id in OLF_START until OLF_END -> Color.rgb(45, 190, 105)
+            id in GUST_START until GUST_END -> Color.rgb(238, 190, 42)
+            id in MECH_START until MECH_END -> Color.rgb(238, 125, 48)
+            id in DESC_START until DESC_END -> Color.rgb(218, 75, 175)
+            id in ASC_START until ASC_END -> Color.rgb(55, 190, 210)
+            id in MOTOR_START until MOTOR_END -> Color.rgb(235, 70, 75)
+            else -> Color.rgb(150, 160, 170)
+        }
+
+        private fun drawRegionLegend(c: Canvas, x: Float, y: Float, w: Float) {
+            val labels = arrayOf("VIS", "OLF", "GUST", "MECH", "CENTRAL", "DN", "ASC", "MOTOR")
+            val colors = intArrayOf(
+                Color.rgb(55,145,235), Color.rgb(45,190,105), Color.rgb(238,190,42), Color.rgb(238,125,48),
+                Color.rgb(150,160,170), Color.rgb(218,75,175), Color.rgb(55,190,210), Color.rgb(235,70,75)
+            )
+            val colW = w / 4f
+            paint.typeface = Typeface.DEFAULT_BOLD
+            paint.textSize = 7.5f
+            paint.textAlign = Paint.Align.LEFT
+            for (i in labels.indices) {
+                val row = i / 4
+                val col = i % 4
+                val bx = x + col * colW
+                val by = y + row * 13f
+                paint.color = colors[i]
+                c.drawCircle(bx + 3.5f, by + 4.5f, 3.2f, paint)
+                paint.color = Color.rgb(210, 216, 220)
+                c.drawText(labels[i], bx + 10f, by + 7f, paint)
+            }
+        }
+
+        private fun regionRateForId(id: Int): Float = when {
+            id in VIS_START until VIS_END -> visualRateDisplay
+            id in OLF_START until OLF_END -> olfactoryRateDisplay
+            id in GUST_START until GUST_END -> gustatoryRateDisplay
+            id in MECH_START until MECH_END -> mechanosensoryRateDisplay
+            id in DESC_START until DESC_END -> descendingRateDisplay
+            id in ASC_START until ASC_END -> ascendingRateDisplay
+            id in MOTOR_START until MOTOR_END -> motorRateDisplay
+            else -> centralRateDisplay
+        }
+
         private fun drawBrainMap(c: Canvas, x: Float, y: Float, w: Float, h: Float) {
             paint.style = Paint.Style.FILL
             paint.color = Color.rgb(27, 32, 36)
@@ -1457,12 +1536,38 @@ class MainActivity : Activity() {
             // Simplified Drosophila CNS silhouette: bilateral optic lobes,
             // central brain and a short ventral nerve cord. It is a visual map,
             // while the nodes/links over it come from the retained connectome.
-            paint.color = Color.rgb(54, 61, 68)
+            paint.color = Color.argb(48, 55, 145, 235)
             c.drawOval(x + w * .055f, y + h * .18f, x + w * .29f, y + h * .73f, paint)
             c.drawOval(x + w * .71f, y + h * .18f, x + w * .945f, y + h * .73f, paint)
 
-            paint.color = Color.rgb(68, 75, 82)
+            paint.color = Color.argb(45, 150, 160, 170)
             c.drawOval(x + w * .27f, y + h * .22f, x + w * .73f, y + h * .70f, paint)
+
+            val visGlow = (visualRateDisplay * 255f).toInt().coerceIn(18, 105)
+            val olfGlow = (olfactoryRateDisplay * 255f).toInt().coerceIn(18, 105)
+            val gustGlow = (gustatoryRateDisplay * 255f).toInt().coerceIn(18, 105)
+            val mechGlow = (mechanosensoryRateDisplay * 255f).toInt().coerceIn(18, 105)
+            val dnGlow = (descendingRateDisplay * 255f).toInt().coerceIn(18, 105)
+            val ascGlow = (ascendingRateDisplay * 255f).toInt().coerceIn(18, 105)
+            val motorGlow = (motorRateDisplay * 255f).toInt().coerceIn(18, 105)
+            paint.color = Color.argb(visGlow, 55, 145, 235)
+            c.drawOval(x + w * .055f, y + h * .18f, x + w * .29f, y + h * .73f, paint)
+            c.drawOval(x + w * .71f, y + h * .18f, x + w * .945f, y + h * .73f, paint)
+            paint.color = Color.argb(olfGlow, 45, 190, 105)
+            c.drawOval(x + w * .35f, y + h * .43f, x + w * .45f, y + h * .64f, paint)
+            c.drawOval(x + w * .55f, y + h * .43f, x + w * .65f, y + h * .64f, paint)
+            paint.color = Color.argb(gustGlow, 238, 190, 42)
+            c.drawCircle(x + w * .40f, y + h * .60f, min(w, h) * .045f, paint)
+            c.drawCircle(x + w * .60f, y + h * .60f, min(w, h) * .045f, paint)
+            paint.color = Color.argb(mechGlow, 238, 125, 48)
+            c.drawOval(x + w * .31f, y + h * .52f, x + w * .41f, y + h * .76f, paint)
+            c.drawOval(x + w * .59f, y + h * .52f, x + w * .69f, y + h * .76f, paint)
+            paint.color = Color.argb(dnGlow, 218, 75, 175)
+            c.drawOval(x + w * .43f, y + h * .58f, x + w * .57f, y + h * .76f, paint)
+            paint.color = Color.argb(ascGlow, 55, 190, 210)
+            c.drawOval(x + w * .44f, y + h * .62f, x + w * .56f, y + h * .84f, paint)
+            paint.color = Color.argb(motorGlow, 235, 70, 75)
+            c.drawRoundRect(cx - w * .055f, y + h * .66f, cx + w * .055f, y + h * .92f, w * .025f, w * .025f, paint)
 
             // Mushroom-body / central-complex hints.
             paint.style = Paint.Style.STROKE
@@ -1530,38 +1635,61 @@ class MainActivity : Activity() {
                 }
             }
 
-            // Real retained edges between representative neurons.
+            // Real retained edges between representative neurons. Color follows
+            // the source region and alpha/width follows recent neural activity.
             paint.style = Paint.Style.STROKE
-            paint.strokeWidth = .55f
             for ((sourceRep, targetRep) in brainDisplayLinks) {
                 val sourceId = brainDisplayIds[sourceRep]
                 val targetId = brainDisplayIds[targetRep]
                 val a = posForNeuron(sourceId)
                 val b = posForNeuron(targetId)
-                val active = fired[sourceId] || fired[targetId]
-                paint.color = if (active) Color.argb(105, 112, 215, 160) else Color.argb(32, 150, 160, 168)
+                val intensity = max(visualActivity[sourceId], visualActivity[targetId])
+                val active = intensity > .035f
+                paint.strokeWidth = if (active) .8f + intensity * 1.8f else .45f
+                val base = regionColor(sourceId)
+                val alpha = if (active) (45f + 150f * intensity).toInt().coerceIn(45, 195) else 22
+                paint.color = Color.argb(alpha, Color.red(base), Color.green(base), Color.blue(base))
                 c.drawLine(a[0], a[1], b[0], b[1], paint)
             }
 
-            // Draw representative neurons. Positions are deterministic functions
-            // of the real neuron ID, so the display remains stable between frames.
+            // Representative neurons retain their real IDs. Color identifies the
+            // anatomical population; radius/brightness identifies activity.
             paint.style = Paint.Style.FILL
             for (rep in brainDisplayIds.indices) {
                 val id = brainDisplayIds[rep]
                 val p = posForNeuron(id)
-                val active = fired[id]
+                val intensity = max(visualActivity[id], regionRateForId(id) * .72f)
                 val route = max(routeForward[id], max(routeTurn[id], routeEscape[id]))
-                if (active) {
-                    paint.color = Color.argb(90, 70, 220, 150)
-                    c.drawCircle(p[0], p[1], 5.5f, paint)
-                    paint.color = Color.rgb(255, 226, 65)
-                    c.drawCircle(p[0], p[1], 2.1f, paint)
-                } else {
-                    val base = (62f + route * 80f).toInt().coerceIn(45, 150)
-                    paint.color = Color.rgb(base, base + 4, base + 9)
-                    c.drawCircle(p[0], p[1], 1.45f, paint)
+                val base = regionColor(id)
+                val alpha = if (intensity > .025f) (85f + 170f * intensity).toInt().coerceIn(85, 255) else 72
+                val radius = if (intensity > .025f) 1.7f + 4.4f * intensity else 1.35f
+                paint.color = Color.argb(alpha, Color.red(base), Color.green(base), Color.blue(base))
+                c.drawCircle(p[0], p[1], radius, paint)
+                if (intensity > .38f) {
+                    paint.color = Color.argb((55f + 115f * intensity).toInt().coerceIn(55, 170), 255, 255, 255)
+                    c.drawCircle(p[0], p[1], max(1.0f, radius * .28f), paint)
+                } else if (intensity <= .025f) {
+                    val routeBase = (55f + route * 75f).toInt().coerceIn(45, 125)
+                    paint.color = Color.argb(70, routeBase, routeBase + 4, routeBase + 9)
+                    c.drawCircle(p[0], p[1], 1.0f, paint)
                 }
             }
+
+            paint.textSize = 6.5f
+            paint.typeface = Typeface.DEFAULT
+            paint.textAlign = Paint.Align.RIGHT
+            paint.color = Color.rgb(185, 192, 196)
+            c.drawText("actividad baja", x + w - 55f, y + h - 12f, paint)
+            paint.textAlign = Paint.Align.LEFT
+            for (i in 0..4) {
+                val t = i / 4f
+                val rr = 2f + 3.5f * t
+                paint.color = Color.rgb(65 + (190f * t).toInt(), 90 + (120f * t).toInt(), 210 - (70f * t).toInt())
+                c.drawCircle(x + w - 48f + i * 9f, y + h - 13f, rr, paint)
+            }
+            paint.color = Color.rgb(240, 240, 240)
+            paint.textAlign = Paint.Align.LEFT
+            c.drawText("alta", x + w - 8f, y + h - 12f, paint)
 
             paint.color = Color.rgb(190, 198, 202)
             paint.textSize = 7f
@@ -1569,7 +1697,7 @@ class MainActivity : Activity() {
             paint.textAlign = Paint.Align.CENTER
             c.drawText("ÓPTICO", x + w * .16f, y + h * .88f, paint)
             c.drawText("ÓPTICO", x + w * .84f, y + h * .88f, paint)
-            c.drawText("CEREBRO CENTRAL", cx, y + h * .18f, paint)
+            c.drawText("CENTRAL", cx, y + h * .18f, paint)
             c.drawText("VNC", cx, y + h * .97f, paint)
             paint.textAlign = Paint.Align.LEFT
         }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent structural validation for FlyBrain V1.06 generated data."""
+"""Independent structural validation for FlyBrain V1.07 generated data."""
 from __future__ import annotations
 
 import json
@@ -9,7 +9,7 @@ import struct
 from pathlib import Path
 
 TARGET = 16669
-MAGIC = b"FBC102\x00\x00"  # Binary format remains FBC102; app release is V1.06.
+MAGIC = b"FBC102\x00\x00"  # Binary format remains FBC102; app release is V1.07.
 NODE_SIZE = 25
 EDGE_SIZE = 12
 HEADER_SIZE = 16
@@ -39,7 +39,7 @@ def main(root: Path) -> None:
     main_text = main_path.read_text()
 
     assert report["dataset"] == "MaleCNS v1.0"
-    assert report["flybrain_version"] == "1.06"
+    assert report["flybrain_version"] == "1.07"
     assert report["binary_format"] == "FBC102"
     assert report["node_record_bytes"] == NODE_SIZE
     assert report["edge_record_bytes"] == EDGE_SIZE
