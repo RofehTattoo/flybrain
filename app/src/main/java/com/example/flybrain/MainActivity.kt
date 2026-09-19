@@ -308,16 +308,20 @@ class MainActivity : Activity() {
         private var dangerDirectionalBias = 0f
         private var dangerLoom = 0f
 
-        // V1.04: endogenous locomotor state. This is deliberately not a
-        // stimulus-to-movement rule. It is a weak, seeded stochastic current
-        // applied to non-motor central/VNC neurons, allowing the retained
-        // recurrent network to enter and leave exploratory states.
+        // V1.08: REST <-> LOCOMOTION is an endogenous homeostatic state, not a
+        // timer and not a direct body command. Activity builds a bounded rest
+        // pressure; measured halt-related DN activity can reinforce the transition;
+        // rest pressure then decays and a weak internal wake drive allows spontaneous
+        // re-entry into locomotion without an external stimulus. The body still moves
+        // only from measured VNC motor neurons.
         private var explorationState = 0f
         private var explorationPhase = 0f
-        private var locomotorDrive = .62f
-        private var locomotorPhase = .0f
-        private var quietLocomotionTime = 0f
         private var motorActivityMemory = 0f
+        private var restPressure = 0f
+        private var wakePressure = 0f
+        private var restState = false
+        private var restStateBlend = 0f
+        private var haltEvidenceDisplay = 0f
         private var previousFoodDrive = 0f
         private var previousLightDrive = 0f
         private var previousDangerDrive = 0f
@@ -331,9 +335,10 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.07\n")
+            append("FLYBRAIN V1.08\n")
             append("16.669 neuronas · MaleCNS v1.0\n")
-            append("Comidas $foodHits · Escapes $escapeEvents · Saciedad ${(satiety * 100).toInt()}% · Memoria ${(memoryTrace * 100).toInt()}% · FPS ${fps.toInt()}")
+            append("Comidas $foodHits · Escapes $escapeEvents · Saciedad ${(satiety * 100).toInt()}% · Memoria ${(memoryTrace * 100).toInt()}% · FPS ${fps.toInt()}\n")
+            append("Estado ${if (restState) "REPOSO" else "LOCOMOCIÓN"} · Presión ${(restPressure * 100).toInt()}%")
         }
 
         private fun behaviorLabel(): String {
@@ -477,10 +482,12 @@ class MainActivity : Activity() {
             dangerLoom = 0f
             explorationState = .45f
             explorationPhase = 0f
-            locomotorDrive = .62f
-            locomotorPhase = 0f
-            quietLocomotionTime = 0f
             motorActivityMemory = 0f
+            restPressure = 0f
+            wakePressure = 0f
+            restState = false
+            restStateBlend = 0f
+            haltEvidenceDisplay = 0f
             previousFoodDrive = 0f
             previousLightDrive = 0f
             previousDangerDrive = 0f
@@ -886,13 +893,14 @@ class MainActivity : Activity() {
                 synTrace[i] = (synTrace[i] * synDecay + if (prevFired[i]) 1f else 0f).coerceAtMost(3f)
             }
 
-            // V1.04: internal locomotor state. This is a modulatory input to
-            // central/descending neurons, not a body-level movement command.
-            // The body can move only if measured VNC motor neurons actually fire.
+            // V1.08: remove the previous always-on locomotor oscillator.
+            // Drosophila show spontaneous bouts of walking and rest; a fixed periodic
+            // oscillator would force movement and could never produce an endogenous
+            // rest decision. The retained network already supplies recurrence and
+            // stochastic membrane drive; this state only provides a slow homeostatic
+            // modulation between those measured neural states.
             explorationPhase += dt * (1.35f + explorationState * .55f)
-            locomotorPhase += dt * (2.15f + locomotorDrive * .75f)
             val oscillatory = (.5f + .5f * sin(explorationPhase)).coerceIn(0f, 1f)
-            val locomotorOsc = (0.5f + 0.5f * sin(locomotorPhase)).coerceIn(0f, 1f)
 
             val sensoryNovelty = (abs(foodDrive - previousFoodDrive) +
                 abs(lightDrive - previousLightDrive) +
@@ -905,15 +913,47 @@ class MainActivity : Activity() {
             explorationState += dt * (.20f * (targetExploration - explorationState))
             explorationState = explorationState.coerceIn(.05f, .95f)
 
-            // Homeostatic locomotor pressure: prolonged immobility slowly raises
-            // internal-state drive. It never writes position, speed or heading.
+            // V1.08 REST <-> LOCOMOTION controller. This is not a clock: the
+            // pressure is accumulated from measured motor activity and modulated by
+            // the retained halt-related DN population. External threat blocks rest,
+            // while low-demand/feeding contexts permit the network to halt.
             val recentMotor = populationRate(MOTOR_START, MOTOR_END)
             motorActivityMemory = .94f * motorActivityMemory + .06f * recentMotor
-            if (recentMotor < .0025f) quietLocomotionTime += dt else quietLocomotionTime = max(0f, quietLocomotionTime - dt * 2f)
-            val homeostat = if (quietLocomotionTime > 1.25f) .11f else 0f
-            val sensoryModulation = (.10f * sensoryArousal + .06f * sensoryNovelty)
-            locomotorDrive += dt * (.075f * (.62f + homeostat + sensoryModulation - locomotorDrive))
-            locomotorDrive = locomotorDrive.coerceIn(.20f, .92f)
+            val dnHalt = descendingRoleRate(3)
+            val haltEvidence = (dnHalt * .70f + populationRate(ASC_START, ASC_END) * .30f).coerceIn(0f, 1f)
+            haltEvidenceDisplay = .94f * haltEvidenceDisplay + .06f * haltEvidence
+            val threatDemand = dangerDrive.coerceIn(0f, 1f)
+            val feedingDemand = (foodDrive * .55f + populationRate(GUST_START, GUST_END) * .45f).coerceIn(0f, 1f)
+            val wakeDemand = max(threatDemand, lightDrive * .35f)
+
+            if (!restState) {
+                val buildRate = (0.00055f + 0.0030f * motorActivityMemory + 0.0014f * haltEvidence)
+                    .coerceAtLeast(0f)
+                restPressure += dt * buildRate
+                // Threat is an arousal signal, not a movement shortcut: it simply
+                // opposes the homeostatic transition into rest.
+                restPressure -= dt * (.0022f * threatDemand)
+                restPressure = restPressure.coerceIn(0f, 1f)
+                if (restPressure > .72f && threatDemand < .38f && (haltEvidence > .004f || motorActivityMemory > .035f || feedingDemand > .45f)) {
+                    restState = true
+                    wakePressure = .05f
+                }
+            } else {
+                // Once resting, the homeostat discharges gradually. The discharge is
+                // state-dependent rather than a fixed sleep/rest duration. Strong
+                // sensory demand can terminate rest immediately, as in a real arousal
+                // transition, without directly writing position or speed.
+                restPressure -= dt * (.0017f + .0011f * (1f - motorActivityMemory))
+                restPressure = restPressure.coerceIn(0f, 1f)
+                wakePressure += dt * (.0018f + .0035f * (1f - restPressure))
+                wakePressure = wakePressure.coerceIn(0f, 1f)
+                if (wakeDemand > .42f || restPressure < .22f || wakePressure > .72f) {
+                    restState = false
+                    wakePressure = .05f
+                }
+            }
+            val restTarget = if (restState) 1f else 0f
+            restStateBlend += (restTarget - restStateBlend) * (1f - exp((-dt / .35f).toDouble()).toFloat())
 
             previousFoodDrive = foodDrive
             previousLightDrive = lightDrive
@@ -953,11 +993,28 @@ class MainActivity : Activity() {
                     (.006f + .014f * oscillatory) * explorationState * dt * 18f
                 } else 0f
 
+                // V1.08: during rest, a weak homeostatic inhibition is applied to
+                // central/descending neurons. It does not bypass the connectome or
+                // touch the body state. A slowly growing internal wake drive opposes
+                // this inhibition so rest can end spontaneously without a stimulus.
+                val restInhibition = if (!isSensor && !isMotor && restState) {
+                    val dnFactor = if (isDesc) 1.75f else 1f
+                    (.0075f + .014f * restStateBlend + .010f * haltEvidenceDisplay) * dnFactor * dt * 18f
+                } else 0f
+                val wakeDrive = if (!isSensor && !isMotor && restState) {
+                    (.0012f + .0055f * wakePressure) * dt * 18f
+                } else 0f
+
                 // Weak state modulation is applied generically to non-sensory,
-                // non-motor neurons. Functional DN labels are diagnostics only;
-                // they do not inject artificial role-specific drive.
+                // non-motor neurons. During locomotion it remains permissive; during
+                // rest the same term is progressively opposed by the homeostat.
+                val locomotorBias = if (restState) {
+                    (.0015f + .0040f * wakePressure)
+                } else {
+                    (.0035f + .0065f * (1f - restStateBlend)) * (0.65f + 0.35f * explorationState)
+                }
                 val stateDrive = if (!isSensor && !isMotor) {
-                    (.004f + .009f * locomotorOsc) * locomotorDrive * dt * 18f
+                    locomotorBias * dt * 18f - restInhibition + wakeDrive
                 } else 0f
 
                 val tonic = when {

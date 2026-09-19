@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.07.
+"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.08.
 
 The reduction is derived from the published MaleCNS v1.0 annotation and weighted
 connectivity tables. It keeps exactly 10% of the 166,691-neuron census by
@@ -778,7 +778,7 @@ def main(root: Path) -> None:
     meta = root / "app" / "src" / "main" / "java" / "com" / "example" / "flybrain" / "GeneratedConnectomeMeta.kt"
     motor_role_counts = {int(k): int(v) for k,v in selected.groupby("motor_role").size().to_dict().items()}
 
-    meta.write_text('package com.example.flybrain\n\nobject GeneratedConnectomeMeta {\n    const val VERSION = "MaleCNS v1.0 · FlyBrain V1.07"\n    const val FORMAT_MAGIC = "FBC102"\n    const val FORMAT_VERSION = 102\n    const val NEURONS = %d\n    const val EDGES = %d\n    const val CONTACTS_RETAINED = %dL\n    const val VIS_START = %d\n    const val VIS_END = %d\n    const val OLF_START = %d\n    const val OLF_END = %d\n    const val GUST_START = %d\n    const val GUST_END = %d\n    const val MECH_START = %d\n    const val MECH_END = %d\n    const val DESC_START = %d\n    const val DESC_END = %d\n    const val ASC_START = %d\n    const val ASC_END = %d\n    const val VMOTOR_START = %d\n    const val VMOTOR_END = %d\n    const val OTHER_START = %d\n    const val OTHER_END = %d\n    const val MOTOR_LEG = 1\n    const val MOTOR_WING = 2\n    const val MOTOR_HALTERE = 3\n    const val MOTOR_NECK = 4\n    const val MOTOR_ABDOMEN = 5\n    const val MOTOR_JUMP = 6\n    const val MOTOR_OTHER = 7\n}\n' % (TARGET, len(edges), contacts,
+    meta.write_text('package com.example.flybrain\n\nobject GeneratedConnectomeMeta {\n    const val VERSION = "MaleCNS v1.0 · FlyBrain V1.08"\n    const val FORMAT_MAGIC = "FBC102"\n    const val FORMAT_VERSION = 102\n    const val NEURONS = %d\n    const val EDGES = %d\n    const val CONTACTS_RETAINED = %dL\n    const val VIS_START = %d\n    const val VIS_END = %d\n    const val OLF_START = %d\n    const val OLF_END = %d\n    const val GUST_START = %d\n    const val GUST_END = %d\n    const val MECH_START = %d\n    const val MECH_END = %d\n    const val DESC_START = %d\n    const val DESC_END = %d\n    const val ASC_START = %d\n    const val ASC_END = %d\n    const val VMOTOR_START = %d\n    const val VMOTOR_END = %d\n    const val OTHER_START = %d\n    const val OTHER_END = %d\n    const val MOTOR_LEG = 1\n    const val MOTOR_WING = 2\n    const val MOTOR_HALTERE = 3\n    const val MOTOR_NECK = 4\n    const val MOTOR_ABDOMEN = 5\n    const val MOTOR_JUMP = 6\n    const val MOTOR_OTHER = 7\n}\n' % (TARGET, len(edges), contacts,
        population_ranges["visual"][0], population_ranges["visual"][1], population_ranges["olfactory"][0], population_ranges["olfactory"][1],
        ranges["gustatory"][0], ranges["gustatory"][1], ranges["mechanosensory"][0], ranges["mechanosensory"][1],
        desc[0], desc[1], asc[0], asc[1], vmotor[0], vmotor[1], other[0], other[1]))
@@ -798,7 +798,7 @@ def main(root: Path) -> None:
 
     report = {
         "dataset": "MaleCNS v1.0",
-        "flybrain_version": "1.07",
+        "flybrain_version": "1.08",
         "binary_format": "FBC102",
         "node_record_bytes": NODE_SIZE,
         "edge_record_bytes": EDGE_SIZE,

@@ -1,4 +1,4 @@
-# FlyBrain V1.07
+# FlyBrain V1.08
 
 ## Objetivo
 V1.07 mantiene exactamente 16.669 neuronas del MaleCNS v1.0 y da prioridad explícita a la preservación de rutas funcionales medidas en el conectoma reducido. La selección ya no depende únicamente de grado/superclase: se conservan preferentemente neuronas intermedias que participan en rutas de dos saltos `sensor -> célula -> DN` y `DN -> célula -> MN`, separando familias de avance, orientación/giro, escape y sensorimotora general.
@@ -104,3 +104,20 @@ V1.07 mantiene intacta la simulación de V1.06 y cambia únicamente la presentac
 - El brillo/tamaño de las neuronas y el ancho/transparencia de las conexiones representan intensidad reciente de actividad.
 - Se añade una leyenda de regiones y una escala visual de intensidad.
 - No se añaden neuronas, conexiones ni reglas de comportamiento.
+
+
+## V1.08 — REST ↔ LOCOMOCIÓN
+
+V1.08 mantiene exactamente la reducción connectómica de V1.07: 16.669 neuronas, las mismas aristas publicadas y el mismo formato FBC102. El primer objetivo de esta versión es corregir la principal limitación conductual observada en las pruebas largas: el estado locomotor anterior contenía una oscilación endógena siempre positiva que favorecía que la mosca continuara moviéndose indefinidamente.
+
+La modificación elimina ese oscilador locomotor forzado y lo sustituye por un estado homeostático lento y acotado:
+- la actividad motora VNC medida acumula presión de reposo;
+- la actividad descendente etiquetada como familia de halting/locomotor-suppression y la actividad ascendente pueden reforzar la transición;
+- la amenaza sensorial se opone a entrar en reposo;
+- durante el reposo la presión se descarga y un pequeño impulso interno de despertar aumenta progresivamente;
+- la salida del reposo no necesita un estímulo externo;
+- el cuerpo sigue moviéndose exclusivamente a partir de actividad de neuronas motoras VNC medidas.
+
+Esto no se presenta como un modelo de sueño. Es una primera aproximación a las transiciones espontáneas REST ↔ LOCOMOTION. La literatura experimental muestra que Drosophila presenta episodios espontáneos de marcha y reposo y que existen circuitos específicos de halting que pueden inhibir comandos descendentes de marcha o frenar activamente la marcha en el VNC. Sapkal et al. (Nature 2024) describen los mecanismos walk-OFF y brake; Aimon et al. (eLife 2023) muestran cambios globales de actividad cerebral asociados a los episodios espontáneos de marcha.
+
+La presión de reposo es una abstracción homeostática del modelo, no una neurona nueva ni una conexión añadida. No escribe directamente posición, velocidad, rumbo ni actividad motora.

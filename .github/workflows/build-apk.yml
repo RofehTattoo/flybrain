@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V1.07
+name: Build FlyBrain APK V1.08
 
 on:
   workflow_dispatch:
@@ -58,7 +58,7 @@ jobs:
       # ============================================================
       # 6. COMPROBAR ESTRUCTURA DEL REPOSITORIO
       # ============================================================
-      - name: Comprobar estructura V1.07
+      - name: Comprobar estructura V1.08
         run: |
           set -euo pipefail
 
@@ -76,9 +76,9 @@ jobs:
           echo "ESTRUCTURA DEL REPOSITORIO: OK"
 
       # ============================================================
-      # 7. IDENTIDAD V1.07
+      # 7. IDENTIDAD V1.08
       # ============================================================
-      - name: Comprobar identidad V1.07
+      - name: Comprobar identidad V1.08
         run: |
           set -euo pipefail
 
@@ -88,9 +88,9 @@ jobs:
           BUILDER="tools/build_connectome.py"
           WORKFLOW=".github/workflows/build-apk.yml"
 
-          grep -Fq 'versionCode = 107' "$APP"
-          grep -Fq 'versionName = "1.07"' "$APP"
-          grep -Fq 'FLYBRAIN V1.07' "$MAIN"
+          grep -Fq 'versionCode = 108' "$APP"
+          grep -Fq 'versionName = "1.08"' "$APP"
+          grep -Fq 'FLYBRAIN V1.08' "$MAIN"
           grep -Fq 'FORMAT_MAGIC = "FBC102"' "$META"
           grep -Fq 'FORMAT_VERSION = 102' "$META"
           grep -Fq 'NEURONS = 16669' "$META"
@@ -99,7 +99,7 @@ jobs:
           grep -Fq 'EDGE_SIZE = 12' "$BUILDER"
 
           grep -Fq 'FBC102' "$WORKFLOW"
-          grep -Fq 'FlyBrain-V1.07-APK' "$WORKFLOW"
+          grep -Fq 'FlyBrain-V1.08-APK' "$WORKFLOW"
           grep -Fq 'FORMAT_VERSION = 102' "$BUILDER"
 
           if grep -Eq 'versionCode = 102|versionName = "1\\.02"|FLYBRAIN V1\\.02|flybrain_version": "1\\.02"' \
@@ -108,12 +108,12 @@ jobs:
             exit 1
           fi
 
-          echo "IDENTIDAD V1.07: OK"
+          echo "IDENTIDAD V1.08: OK"
 
       # ============================================================
       # 8. PYTHON: SINTAXIS + REGRESION DE ARRAYS SELECCIONADOS
       # ============================================================
-      - name: Validar scripts Python V1.07
+      - name: Validar scripts Python V1.08
         run: |
           set -euo pipefail
 
@@ -170,7 +170,7 @@ jobs:
       # ============================================================
       # 10. GENERAR MALECNS REDUCIDO REAL
       # ============================================================
-      - name: Generar reducción real MaleCNS V1.07
+      - name: Generar reducción real MaleCNS V1.08
         run: |
           set -euo pipefail
 
@@ -210,7 +210,7 @@ jobs:
           d = json.loads(p.read_text())
 
           assert d["dataset"] == "MaleCNS v1.0"
-          assert d["flybrain_version"] == "1.07"
+          assert d["flybrain_version"] == "1.08"
           assert d["binary_format"] == "FBC102"
           assert d["neurons_retained"] == 16669
           assert d["node_record_bytes"] == 25
@@ -431,8 +431,6 @@ jobs:
           for x in \
             synTrace \
             synDecay \
-            locomotorDrive \
-            locomotorPhase \
             motorActivityMemory \
             visualRateDisplay \
             olfactoryRateDisplay \
@@ -445,6 +443,11 @@ jobs:
             forwardRouteActivityDisplay \
             turnRouteActivityDisplay \
             escapeRouteActivityDisplay \
+            restPressure \
+            wakePressure \
+            restState \
+            restStateBlend \
+            haltEvidenceDisplay \
             approachAction \
             escapeAction \
             orientAction \
@@ -456,6 +459,17 @@ jobs:
           do
             grep -Fq "$x" "$MAIN"
           done
+
+          if grep -Eq 'locomotorDrive|locomotorPhase|quietLocomotionTime|locomotorOsc' "$MAIN"; then
+            echo "ERROR: oscilador locomotor continuo de versiones anteriores detectado"
+            exit 1
+          fi
+
+          grep -Fq 'restPressure += dt * buildRate' "$MAIN"
+          grep -Fq 'if (restPressure > .72f' "$MAIN"
+          grep -Fq 'wakePressure += dt' "$MAIN"
+          grep -Fq 'if (wakeDemand > .42f || restPressure < .22f || wakePressure > .72f)' "$MAIN"
+          grep -Fq 'val restInhibition = if (!isSensor && !isMotor && restState)' "$MAIN"
 
           echo "DINAMICA / DIAGNOSTICO / ACCIONES: OK"
 
@@ -501,12 +515,17 @@ jobs:
           grep -Fq 'if (danger > .68f && lastDangerLevel <= .68f && escapeNeural)' "$MAIN"
           grep -Fq 'if (foodOn && foodDistance < .055f && gustatoryRateNow > .04f' "$MAIN"
 
+          if grep -Eq 'restState.*(flyX|flyY|flySpeed|heading)|restPressure.*(flyX|flyY|flySpeed|heading)' "$MAIN"; then
+            echo "ERROR: reposo conectado directamente a la mecánica corporal"
+            exit 1
+          fi
+
           echo "INTEGRIDAD CAUSAL: OK"
 
       # ============================================================
       # 17. KOTLIN ESTRUCTURAL
       # ============================================================
-      - name: Validar estructura Kotlin V1.07
+      - name: Validar estructura Kotlin V1.08
         run: |
           set -euo pipefail
 
@@ -544,10 +563,10 @@ jobs:
           test -s app/src/main/res/raw/malecns_reduced.bin
           test -s app/src/main/res/raw/malecns_reduced_report.json
 
-          grep -Fq 'versionCode = 107' \
+          grep -Fq 'versionCode = 108' \
             app/build.gradle.kts
 
-          grep -Fq 'versionName = "1.07"' \
+          grep -Fq 'versionName = "1.08"' \
             app/build.gradle.kts
 
           grep -Fq 'FORMAT_VERSION = 102' \
@@ -556,7 +575,7 @@ jobs:
           grep -Fq 'NEURONS = 16669' \
             app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
 
-          grep -Fq '"flybrain_version": "1.07"' \
+          grep -Fq '"flybrain_version": "1.08"' \
             app/src/main/res/raw/malecns_reduced_report.json
 
           grep -Fq '"binary_format": "FBC102"' \
@@ -567,7 +586,7 @@ jobs:
       # ============================================================
       # 19. COMPILAR APK
       # ============================================================
-      - name: Compilar APK V1.07
+      - name: Compilar APK V1.08
         run: |
           set -euo pipefail
 
@@ -577,7 +596,7 @@ jobs:
       # ============================================================
       # 20. VERIFICAR APK REAL
       # ============================================================
-      - name: Verificar APK V1.07
+      - name: Verificar APK V1.08
         run: |
           set -euo pipefail
 
@@ -599,10 +618,10 @@ jobs:
             grep -Fq "package: name='com.example.flybrain'"
 
           echo "$BADGING" | \
-            grep -Fq "versionCode='107'"
+            grep -Fq "versionCode='108'"
 
           echo "$BADGING" | \
-            grep -Fq "versionName='1.07'"
+            grep -Fq "versionName='1.08'"
 
           unzip -l "$APK" | \
             grep -Fq 'malecns_reduced.bin'
@@ -610,7 +629,7 @@ jobs:
           unzip -l "$APK" | \
             grep -Fq 'malecns_reduced_report.json'
 
-          echo "APK V1.07 VALIDADO"
+          echo "APK V1.08 VALIDADO"
 
           ls -lh "$APK"
 
@@ -619,10 +638,10 @@ jobs:
       # ============================================================
       # 21. SUBIR APK
       # ============================================================
-      - name: Subir APK V1.07
+      - name: Subir APK V1.08
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V1.07-APK
+          name: FlyBrain-V1.08-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
